@@ -1,0 +1,142 @@
+import { expect,test,type BrowserContext } from '@playwright/test';
+import { validateJourney } from '../../src/lib/journey/editor';
+import { imageExtension } from '../../src/lib/journey/image-validation';
+const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
+async function authenticate(context: BrowserContext) {
+  const user = { id: '10000000-0000-0000-0000-000000000001',aud: 'authenticated',role: 'authenticated',email: 'creator@example.com',app_metadata: { provider: 'email' },user_metadata: { display_name: 'Test Creator' } };
+  const token = `${encode({ alg: 'HS256',typ: 'JWT' })}.${encode({ sub: user.id,role: 'authenticated',exp: Math.floor(Date.now()/1000)+3600 })}.test-signature`;
+  const session = { access_token: token,refresh_token: 'test-refresh',expires_at: Math.floor(Date.now()/1000)+3600,expires_in: 3600,token_type: 'bearer',user };
+  await context.addCookies([{ name: 'sb-127-auth-token',value: `base64-${encode(session)}`,domain: 'localhost',path: '/' }]);
+}
+test('server validation rejects empty publish and image signature spoofing', () => {
+  const base = { id: '20000000-0000-0000-0000-000000000099',title: 'Route',destination_slug: 'varkala',traveler_type: 'couple',description: '',duration_days: 1,status: 'published',updated_at: null,cover_image_path: null,stops: [] };
+  expect(validateJourney(base)).toContain('at least one stop');
+  expect(imageExtension(new TextEncoder().encode('<script>hello</script>'),'image/png')).toBeNull();
+  expect(imageExtension(new Uint8Array([137,80,78,71,13,10,26,10]),'image/png')).toBe('png');
+});
+test('authenticated create/search/reorder/upload/draft refresh/publish/public discovery (mock services)', async ({ page,context,browser },testInfo) => {
+  // Reproduce the capability available on an HTTP LAN origin.
+  await page.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }));
+  await authenticate(context);
+  const places = [{ name: 'Varkala Cliff',latitude: 8.737,longitude: 76.703 },{ name: 'Varkala Beach',latitude: 8.733,longitude: 76.705 },{ name: 'Kappil Beach',latitude: 8.78,longitude: 76.67 }];
+  const requests: string[] = [];
+  page.on('request',request => requests.push(request.url()));
+  await page.route('**/search/geocode/v6/forward?**',async route => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get('permanent')).toBe('true');
+    const place = places.find(item => item.name === url.searchParams.get('q'))!;
+    await route.fulfill({ json: { features: [{ id: `mapbox-${place.name}`,geometry: { coordinates: [place.longitude,place.latitude] },properties: { name: place.name,full_address: `${place.name}, Kerala, India`,mapbox_id: `mapbox-${place.name}` } }] } });
+  });
+  await page.goto('/create');
+  await expect(page.getByRole('heading',{ name: 'Journey information' })).toBeVisible();
+  await page.getByLabel('Journey title',{ exact: true }).fill(`3 Days in Varkala ${testInfo.project.name}`);
+  await page.getByRole('combobox',{ name: 'Destination',exact: true }).selectOption('varkala');
+  await page.getByRole('combobox',{ name: 'Traveler type',exact: true }).selectOption('couple');
+  await page.getByLabel('Duration in days').fill('3');
+  for (const place of places) {
+    await page.getByRole('combobox',{ name: 'Search for a place' }).fill(place.name);
+    const suggestion = page.getByRole('option',{ name: `${place.name}, Kerala, India` });
+    await expect(suggestion).toBeVisible();
+    if (place.name === 'Varkala Beach') await page.getByRole('combobox',{ name: 'Search for a place' }).press('Enter');
+    else if (place.name === 'Varkala Cliff') await suggestion.getByTestId('add-place').click();
+    else await suggestion.click();
+    await expect(page.getByRole('combobox',{ name: 'Search for a place' })).toHaveValue('');
+    await expect(page.getByRole('combobox',{ name: 'Search for a place' })).toBeFocused();
+  }
+  await page.getByRole('combobox',{ name: 'Search for a place' }).fill('Varkala Cliff');
+  await page.getByRole('option',{ name: 'Varkala Cliff, Kerala, India' }).getByTestId('add-place').click();
+  await expect(page.getByTestId('editor-stop')).toHaveCount(3);
+  await expect(page.getByRole('status').filter({ hasText: 'already in your stops' })).toBeVisible();
+  await page.getByRole('button',{ name: 'Move Kappil Beach up' }).click();
+  await expect(page.getByTestId('editor-stop').getByRole('heading')).toHaveText(['1. Varkala Cliff','2. Kappil Beach','3. Varkala Beach']);
+  await expect(page.getByTestId('route-marker')).toHaveCount(3);
+  await expect(page.getByLabel('Latitude',{ exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Longitude',{ exact: true })).toHaveCount(0);
+  await page.getByTestId('editor-stop').first().getByText('Details & photo',{ exact: true }).click();
+  await page.getByTestId('editor-stop').first().getByLabel('Stop description').fill('Go around sunset for the cliff view.');
+  await page.getByTestId('editor-stop').first().getByRole('combobox',{ name: 'Day',exact: true }).selectOption('1');
+  await page.getByTestId('editor-stop').first().getByLabel('Rating (optional)').fill('4.5');
+  const largeImage = Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB9sAAAAASUVORK5CYII=','base64'),Buffer.alloc(14 * 1024 * 1024)]);
+  await page.getByLabel('Cover image (optional)').setInputFiles({ name: 'test.png',mimeType: 'image/png',buffer: largeImage });
+  await expect(page.getByRole('status').filter({ hasText: 'Photo uploaded and draft saved.' })).toBeVisible();
+  await page.getByRole('button',{ name: 'Save Draft',exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Draft saved.' })).toBeVisible();
+  await page.getByTestId('editor-stop').first().getByLabel('Stop photo (optional)').setInputFiles({ name: 'stop.png',mimeType: 'image/png',buffer: largeImage });
+  await expect(page.getByRole('status').filter({ hasText: 'Photo uploaded and draft saved.' })).toBeVisible();
+  for (const input of [page.getByLabel('Cover image (optional)'),page.getByTestId('editor-stop').first().getByLabel('Stop photo (optional)')]) {
+    await input.setInputFiles({ name: 'too-large.png',mimeType: 'image/png',buffer: Buffer.alloc(15 * 1024 * 1024 + 1) });
+    await expect(page.getByRole('alert').filter({ hasText: 'Image must be 15 MB or smaller.' })).toBeVisible();
+  }
+  const draftUrl = page.url();
+  const id = new URL(draftUrl).searchParams.get('draft');
+  expect(id).toBeTruthy();
+  const invalidImage = await page.request.post(`/api/journeys/${id}/images`,{ headers: { Origin: 'http://localhost:3200' },multipart: { file: { name: 'fake.png',mimeType: 'image/png',buffer: Buffer.from('<html>not an image</html>') } } });
+  expect(invalidImage.status()).toBe(400);
+  const oversized = await page.request.post(`/api/journeys/${id}/images`,{ headers: { Origin: 'http://localhost:3200' },multipart: { file: { name: 'large.png',mimeType: 'image/png',buffer: Buffer.alloc(15 * 1024 * 1024 + 1) } } });
+  expect(oversized.status()).toBe(413);
+  expect((await oversized.json()).error).toBe('Image must be 15 MB or smaller.');
+  const wrongOrigin = await page.request.post('/api/journeys',{ headers: { Origin: 'https://example.com' },data: {} });
+  expect(wrongOrigin.status()).toBe(403);
+  await page.reload();
+  await expect(page.getByLabel('Journey title')).toHaveValue(`3 Days in Varkala ${testInfo.project.name}`);
+  await expect(page.getByTestId('editor-stop').getByRole('heading')).toHaveText(['1. Varkala Cliff','2. Kappil Beach','3. Varkala Beach']);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('builder.png'),fullPage: true });
+  const anonymous = await browser.newContext();
+  const visitor = await anonymous.newPage();
+  const anonymousSave = await anonymous.request.post('http://localhost:3200/api/journeys',{ headers: { Origin: 'http://localhost:3200' },data: {} });
+  expect(anonymousSave.status()).toBe(401);
+  await visitor.goto(`http://localhost:3200/journey/${id}`);
+  await expect(visitor.getByRole('heading',{ name: 'This path ends here.' })).toBeVisible();
+  await visitor.goto(`http://localhost:3200/create?draft=${id}`);
+  await expect(visitor).toHaveURL(/\/login\?next=/);
+  await page.getByRole('button',{ name: 'Publish Journey',exact: true }).click();
+  await expect(page.getByRole('heading',{ name: `3 Days in Varkala ${testInfo.project.name}`,exact: true })).toBeVisible();
+  await expect(page.getByLabel('Public journey URL')).toHaveValue(`https://journey.example/journey/${id}`);
+  await expect(page).toHaveURL(new RegExp(`/create\\?published=${id}`));
+  await page.reload();
+  await expect(page.getByLabel('Public journey URL')).toHaveValue(`https://journey.example/journey/${id}`);
+  await page.getByRole('link',{ name: 'View Journey',exact: true }).click();
+  await expect(page.getByRole('heading',{ level: 1 })).toHaveText(`3 Days in Varkala ${testInfo.project.name}`);
+  await visitor.goto(`http://localhost:3200/journey/${id}`);
+  await expect(visitor.getByRole('heading',{ level: 1 })).toHaveText(`3 Days in Varkala ${testInfo.project.name}`);
+  await visitor.goto('http://localhost:3200/destination/varkala?traveler=couple');
+  await expect(visitor.getByRole('link',{ name: `Open journey: 3 Days in Varkala ${testInfo.project.name}` })).toBeVisible();
+  expect(requests.some(url => /directions|optimization|routing/.test(url))).toBe(false);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.goto(draftUrl);
+  await expect(page.getByRole('heading',{ name: 'This path ends here.' })).toBeVisible();
+  await anonymous.close();
+});
+
+test('search recovery only adds selected places and save errors preserve the builder', async ({ page,context }) => {
+  await authenticate(context);
+  await page.route('**/search/geocode/v6/forward?**',route => route.fulfill({ status: 403,json: { message: 'Forbidden' } }));
+  await page.goto('/create');
+  await page.getByRole('button',{ name: 'Publish Journey',exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Enter a journey title' })).toBeVisible();
+  await page.getByLabel('Journey title').fill('Selected landmark journey');
+  await page.getByRole('combobox',{ name: 'Destination',exact: true }).selectOption('varkala');
+  await page.getByRole('combobox',{ name: 'Traveler type',exact: true }).selectOption('solo');
+  await page.getByRole('combobox',{ name: 'Search for a place' }).fill('Unlisted landmark');
+  await expect(page.getByRole('alert').filter({ hasText: 'Place search is unavailable' })).toBeVisible();
+  await page.getByRole('combobox',{ name: 'Search for a place' }).press('Enter');
+  await expect(page.getByTestId('editor-stop')).toHaveCount(0);
+  await expect(page.getByText('Add a place manually',{ exact: true })).toHaveCount(0);
+  await page.route('**/search/geocode/v6/forward?**',route => route.fulfill({ json: { features: [{ id: 'mapbox-viewpoint',geometry: { coordinates: [76.70,8.74] },properties: { name: 'Sunset viewpoint',full_address: 'Sunset viewpoint, Kerala, India' } }] } }));
+  await page.getByRole('combobox',{ name: 'Search for a place' }).fill('Sunset viewpoint');
+  await page.getByRole('option',{ name: 'Sunset viewpoint, Kerala, India' }).click();
+  await expect(page.getByTestId('editor-stop').getByRole('heading')).toHaveText('1. Sunset viewpoint');
+  await page.getByLabel('Cover image (optional)').setInputFiles({ name: 'unsafe.svg',mimeType: 'image/svg+xml',buffer: Buffer.from('<svg/>') });
+  await expect(page.getByRole('alert').filter({ hasText: 'Choose a JPEG, PNG or WebP image' })).toBeVisible();
+  await page.route('**/api/journeys',route => {
+    const payload = route.request().postDataJSON();
+    expect(payload.stops[0]).toMatchObject({ latitude: 8.74,longitude: 76.70,mapbox_place_id: 'mapbox-viewpoint' });
+    return route.fulfill({ status: 503,json: { error: 'Journey could not be saved. Please try again.' } });
+  });
+  await page.getByRole('button',{ name: 'Save Draft',exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Journey could not be saved' })).toBeVisible();
+  await expect(page.getByLabel('Journey title')).toHaveValue('Selected landmark journey');
+  await expect(page.getByTestId('editor-stop')).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

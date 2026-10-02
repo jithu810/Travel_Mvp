@@ -1,0 +1,24 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Local operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Application output and dependencies
+node_modules/
+.next/
+.next-creation-tests/
+out/
+coverage/
+*.tsbuildinfo
+*.log
+.vercel/
+supabase/.temp/
+supabase/.branches/
+playwright-report/
+test-results/
+supabase/demo-seed.generated.sql
