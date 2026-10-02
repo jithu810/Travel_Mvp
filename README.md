@@ -65,3 +65,5 @@ Deploy as a Next.js project on Vercel with compatible Node.js and default build/
 See [scope and decisions](docs/scope.md). No Dropbox, AI, route optimization, comments, followers, messaging, notifications, bookings, payments, recommendations or additional infrastructure. No changes are pushed to GitHub automatically.
 
 Apply `supabase/migrations/20261002010000_journey_media_15mb.sql` in the hosted Supabase SQL editor to raise the journey-media bucket limit to 15 MB (15,728,640 bytes). Existing RLS and MIME restrictions stay unchanged.
+## Deployment
+Deployed with Vercel.
