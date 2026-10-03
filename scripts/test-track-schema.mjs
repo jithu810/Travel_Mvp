@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+const db = new PGlite();
+const owner='10000000-0000-0000-0000-000000000001',other='10000000-0000-0000-0000-000000000002';
+const journey='20000000-0000-0000-0000-000000000001',id='30000000-0000-0000-0000-000000000001';
+async function as(role,user='') { await db.exec('reset role'); await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]); await db.exec(`set role ${role}`); }
+async function append(payload) { return (await db.query('select public.append_travel_track($1::jsonb) as result',[JSON.stringify(payload)])).rows[0].result; }
+try {
+  await db.exec(`create role anon nologin; create role authenticated nologin;
+    create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    grant usage on schema auth to anon,authenticated; grant execute on function auth.uid() to anon,authenticated;
+    create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+    create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text,name text,unique(bucket_id,name));
+    alter table storage.objects enable row level security;
+    grant usage on schema storage to anon,authenticated; grant select on storage.objects to anon; grant select,insert,update,delete on storage.objects to authenticated;`);
+  for (const migration of ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261003000000_travel_tracks.sql']) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`,import.meta.url),'utf8'));
+
+  await db.query('insert into auth.users(id) values($1),($2)',[owner,other]);
+  await as('authenticated',owner);
+  await db.query("insert into public.journeys(id,user_id,title,status,published_at) values($1,$2,'Private track test','published',now())",[journey,owner]);
+  await db.query("insert into public.journey_stops(journey_id,sequence,name,latitude,longitude) values($1,1,'Stop',8.6,77)",[journey]);
+  await as('authenticated',other);
+  const start=Date.now()-60000;
+  const first={id,journeyId:journey,startedAt:start,endedAt:null,status:'ACTIVE',revision:0,points:[[77,8.6,start,10,0],[77,8.6001,start+1000,10,0]]};
+  assert.deepEqual(await append(first),{revision:1,count:2});
+  assert.deepEqual(await append(first),{revision:1,count:2},'Lost-response retry is idempotent');
+  await assert.rejects(append({...first,points:[]}),/another tab/);
+  const row=(await db.query('select * from public.travel_tracks where id=$1',[id])).rows[0];
+  assert.equal(row.user_id,other);assert.ok(row.distance_meters>11&&row.distance_meters<12);
+  await assert.rejects(db.query("update public.travel_tracks set user_id=$1 where id=$2",[owner,id]),/permission denied/);
+  await assert.rejects(db.query("insert into public.travel_tracks(id,journey_id,user_id,status,started_at) values(gen_random_uuid(),$1,$2,'ACTIVE',now())",[journey,other]),/permission denied/);
+  for(const points of [[[77,8.6,start+1000,10,0]],[[177,8.6,start+2000,10,0]],[[77,91,start+2000,10,0]],[[77,8.6002,start+2000,51,0]],[[77,8.6002,start+2000,10,2]],[[77,8.6002,start+2000,10,0.2]],[[77,8.6002,start+20000,10,0]],[[77,8.6001001,start+2000,10,0]],[[null,8.6,start+2000,10,0]]]) await assert.rejects(append({...first,revision:1,points}),/Invalid/);
+  await assert.rejects(append({...first,revision:1,points:Array(129).fill([77,8.6,start+2000,10,0])}),/Invalid track batch/);
+  await as('authenticated',owner);
+  assert.equal((await db.query('select * from public.travel_tracks')).rows.length,0,'Journey creator cannot read another traveler history');
+  await assert.rejects(append({...first,revision:1,points:[]}),/unavailable/);
+  await as('anon');
+  await assert.rejects(db.query('select * from public.travel_tracks'),/permission denied/);
+  await assert.rejects(append(first),/permission denied/);
+  const detail=(await db.query('select public.get_journey_detail($1) as result',[journey])).rows[0].result;
+  assert.ok(!JSON.stringify(detail).includes(id),'Public journey response excludes tracks');
+  await as('authenticated',other);
+  let revision=1;
+  await append({...first,revision:revision++,status:'PAUSED',points:[]});
+  await append({...first,revision:revision++,status:'ACTIVE',points:[[78,9,start+20000,10,1],[78,9.0001,start+21000,10,1]]});
+  const distance=(await db.query('select distance_meters from public.travel_tracks where id=$1',[id])).rows[0].distance_meters;
+  assert.ok(distance>22&&distance<23,'No invented pause/outage distance');
+  const finish={...first,revision:revision++,status:'COMPLETED',endedAt:start+30000,points:[[78,9.0002,start+22000,10,1]]};
+  await append(finish); await append(finish);
+  const final=(await db.query('select status,duration_seconds,jsonb_array_length(points) as count from public.travel_tracks where id=$1',[id])).rows[0];
+  assert.deepEqual(final,{status:'COMPLETED',duration_seconds:30,count:5});
+  await assert.rejects(append({...finish,revision,points:[]}),/finished/);
+  const second={...first,id:'30000000-0000-0000-0000-000000000002',points:[]};
+  await append(second);
+  assert.equal((await db.query('select * from public.travel_tracks')).rows.length,2,'Repeated travel uses a separate identity');
+  const copied=(await db.query('select public.copy_journey($1) as id',[journey])).rows[0].id;
+  assert.equal((await db.query('select * from public.travel_tracks where journey_id=$1',[copied])).rows.length,0,'Remix inherits no GPS history');
+  await as('authenticated',owner);
+  await db.query('delete from public.journeys where id=$1',[journey]);
+  await db.exec('reset role');
+  assert.equal((await db.query('select * from public.travel_tracks')).rows.length,0,'Journey deletion cascades private history safely');
+  console.log('PASS travel-track SQL: owner isolation, RPC-only mutations, bounded validation, CAS, idempotent retry, segmented distance, finalization, repeated sessions, public/remix exclusion and deletion');
+} finally { await db.close(); }

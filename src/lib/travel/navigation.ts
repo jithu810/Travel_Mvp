@@ -3,6 +3,7 @@ import { distanceMeters, freshLocation, MAX_ARRIVAL_ACCURACY_METERS, type Locati
 import type { TravelStatus } from './session';
 import { DeviationConfirmation, MIN_REROUTE_INTERVAL_MS } from './rerouting';
 
+export const NAVIGATION_NOTICE_DURATION_MS = 5_000;
 export const ROUTE_MOVEMENT_METERS = 150;
 export const ROUTE_REFRESH_INTERVAL_MS = 30_000;
 export const ROUTE_MAX_AGE_MS = 120_000;
@@ -15,8 +16,8 @@ export type NavigationDestination = { id: string; name: string; latitude: number
 export type NavigationStep = { instruction: string; type: string; distance: number; geometry: RoadGeometry };
 export type RoadRoute = { geometry: RoadGeometry; distance: number; duration: number | null; steps: NavigationStep[] };
 export type NavigationInput = { status: TravelStatus; fix: LocationFix | null; destination: NavigationDestination | undefined; online: boolean };
-export type NavigationState = { destinationKey: string; route: RoadRoute | null; status: 'idle' | 'calculating' | 'rerouting' | 'active' | 'unavailable'; warning: string; calculatedAt: number; routeStale: boolean; notice: string };
-export const emptyNavigation = (): NavigationState => ({ destinationKey: '', route: null, status: 'idle', warning: '', calculatedAt: 0, routeStale: false, notice: '' });
+export type NavigationState = { destinationKey: string; route: RoadRoute | null; status: 'idle' | 'calculating' | 'rerouting' | 'active' | 'unavailable'; warning: string; calculatedAt: number; routeStale: boolean; checkingRoute: boolean; notice: string };
+export const emptyNavigation = (): NavigationState => ({ destinationKey: '', route: null, status: 'idle', warning: '', calculatedAt: 0, routeStale: false, checkingRoute: false, notice: '' });
 export function destinationKey(destination: NavigationDestination | undefined) { return destination && hasCoordinates(destination) ? `${destination.id}:${destination.longitude}:${destination.latitude}` : ''; }
 export function routingReady(input: NavigationInput, now = Date.now()) { return input.status === 'ACTIVE' && !!destinationKey(input.destination) && !!input.fix && freshLocation(input.fix, now) && input.fix.accuracy <= MAX_ARRIVAL_ACCURACY_METERS; }
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {};
@@ -106,13 +107,14 @@ export class NavigationController {
   update(input: NavigationInput, retry = false) {
     this.input = input;
     const key = destinationKey(input.destination), now = this.now();
+    if (this.state.notice && now - this.state.calculatedAt >= NAVIGATION_NOTICE_DURATION_MS) this.publish({ notice: '' });
     if (input.status !== 'ACTIVE' || !key) { this.stop(); return; }
     if (key !== this.state.destinationKey) {
       this.cancel(); this.origin = null; this.attemptedAt = 0; this.failed = false; this.lastRerouteAt = 0; this.deviation.reset();
       this.publish({ ...emptyNavigation(), destinationKey: key });
     }
-    if (!routingReady(input, now)) { this.cancel(); this.deviation.reset(); this.publish({ status: this.failed ? 'unavailable' : this.state.route ? 'active' : 'idle', warning: 'Waiting for a fresh, accurate GPS position. Route is not being updated.' }); return; }
-    if (!input.online) { this.cancel(); this.failed = true; this.publish({ status: 'unavailable', warning: 'Network unavailable. Any displayed route is the last calculation, not offline navigation.' }); return; }
+    if (!routingReady(input, now)) { this.cancel(); this.deviation.reset(); this.publish({ checkingRoute: false, status: this.failed ? 'unavailable' : this.state.route ? 'active' : 'idle', warning: 'Waiting for a fresh, accurate GPS position. Route is not being updated.' }); return; }
+    if (!input.online) { this.cancel(); this.failed = true; this.publish({ status: 'unavailable', checkingRoute: false, warning: 'Network unavailable. Any displayed route is the last calculation, not offline navigation.' }); return; }
     if (this.state.warning === 'Waiting for a fresh, accurate GPS position. Route is not being updated.') this.publish({ warning: '' });
     const moved = this.origin ? distanceMeters(this.origin, input.fix!) : Infinity;
     if (this.pending) {
@@ -121,6 +123,7 @@ export class NavigationController {
     }
     const elapsed = now - this.attemptedAt;
     const deviation = this.state.route ? this.deviation.update(input.fix, this.state.route.geometry, now) : { suspect: false, confirmed: false };
+    this.publish({ checkingRoute: deviation.suspect && !deviation.confirmed && !this.failed });
     if (deviation.confirmed) this.publish({ routeStale: true, notice: '' });
     const reroute = deviation.confirmed && elapsed >= ROUTE_REFRESH_INTERVAL_MS && (!this.lastRerouteAt || now - this.lastRerouteAt >= MIN_REROUTE_INTERVAL_MS);
     if (retry ? elapsed < ROUTE_RETRY_INTERVAL_MS : this.failed || (deviation.suspect ? !reroute : this.origin && (elapsed < ROUTE_REFRESH_INTERVAL_MS || (moved < ROUTE_MOVEMENT_METERS && now - this.state.calculatedAt < ROUTE_MAX_AGE_MS)))) return;
@@ -128,17 +131,17 @@ export class NavigationController {
     const controller = new AbortController(); this.pending = controller; this.origin = input.fix!; this.attemptedAt = now; this.failed = false;
     const rerouting = !!this.state.route && (reroute || this.state.routeStale);
     if (rerouting) this.lastRerouteAt = now;
-    this.publish({ status: rerouting ? 'rerouting' : 'calculating', warning: '', notice: '' });
+    this.publish({ status: rerouting ? 'rerouting' : 'calculating', checkingRoute: false, warning: '', notice: '' });
     const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
     void this.load(input.fix!, input.destination as NavigationDestination & Point, controller.signal).then(route => {
       if (sequence !== this.sequence || !this.input || !routingReady(this.input, this.now()) || key !== destinationKey(this.input.destination)) return;
       if (distanceMeters(input.fix!, this.input.fix!) >= ROUTE_MOVEMENT_METERS) { this.publish({ status: this.state.route ? 'active' : 'idle', warning: 'Position changed while calculating. Waiting to refresh route.' }); return; }
       this.deviation.reset();
-      this.publish({ route, status: 'active', calculatedAt: this.now(), warning: '', routeStale: false, notice: rerouting ? 'Route updated' : '' });
+      this.publish({ route, status: 'active', calculatedAt: this.now(), warning: '', routeStale: false, checkingRoute: false, notice: rerouting ? 'Route updated' : '' });
     }).catch(error => {
       if (sequence !== this.sequence) return;
       this.failed = true;
-      this.publish({ status: 'unavailable', warning: error instanceof RoutingError ? error.message : controller.signal.aborted ? 'Route calculation timed out. Retry route.' : 'Network error calculating route. Retry route.' });
+      this.publish({ status: 'unavailable', checkingRoute: false, warning: error instanceof RoutingError ? error.message : controller.signal.aborted ? 'Route calculation timed out. Retry route.' : 'Network error calculating route. Retry route.' });
     }).finally(() => { clearTimeout(timer); if (sequence === this.sequence) this.pending = null; });
   }
 }

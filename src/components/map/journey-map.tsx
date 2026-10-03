@@ -6,23 +6,25 @@ import { buildMapData } from "@/lib/journey/map-data";
 import type { JourneyStop } from "@/lib/journey/types";
 import type { LocationFix } from '@/lib/travel/location';
 import type { RoadGeometry } from '@/lib/travel/navigation';
-import { NAVIGATION_MAP_STYLE, navigationCamera, reliableHeading, type NavigationCameraState } from '@/lib/travel/navigation-camera';
+import { NAVIGATION_MAP_STYLE, navigationCamera, followNavigationCamera, reliableHeading, type NavigationCameraState } from '@/lib/travel/navigation-camera';
+import { freshLocation, MAX_ARRIVAL_ACCURACY_METERS } from '@/lib/travel/location';
 import type { TravelStatus } from '@/lib/travel/session';
+import type { trackGeometry } from '@/lib/travel/track';
 
-type Props = { stops: JourneyStop[]; selectedId: string | null; onSelect: (id: string) => void; story?: boolean; progress?: { completedIds: string[]; currentId: string | null }; locationEnabled?: boolean; currentLocation?: LocationFix | null; navigationRoute?: RoadGeometry; navigationMode?: boolean; travelStatus?: TravelStatus };
+type Props = { stops: JourneyStop[]; selectedId: string | null; onSelect: (id: string) => void; story?: boolean; progress?: { completedIds: string[]; currentId: string | null }; locationEnabled?: boolean; currentLocation?: LocationFix | null; navigationRoute?: RoadGeometry; travelledTrack?: ReturnType<typeof trackGeometry>; navigationMode?: boolean; travelStatus?: TravelStatus };
 
 function stopState(id: string, progress: Props['progress']) {
   return !progress ? null : progress.completedIds.includes(id) ? 'completed' : progress.currentId === id ? 'current' : 'upcoming';
 }
 
-function RoutePreview({ stops, selectedId, onSelect, story, progress }: Props) {
+function RoutePreview({ stops, selectedId, onSelect, story, progress, navigationMode = false }: Props) {
   const data = buildMapData(stops);
   if (!data.markers.length) return <div className="flex h-80 items-center justify-center p-8 text-center text-sm text-stone-600">No map coordinates have been added to this journey yet.</div>;
   const lngs = data.markers.map((stop) => stop.longitude);
   const lats = data.markers.map((stop) => stop.latitude);
   const west = Math.min(...lngs), east = Math.max(...lngs), south = Math.min(...lats), north = Math.max(...lats);
   const point = (lng: number, lat: number) => [east === west ? 50 : 10 + ((lng - west) / (east - west)) * 80, north === south ? 50 : 85 - ((lat - south) / (north - south)) * 70];
-  return <div className={`relative bg-[#e7eedf] ${story ? "h-[360px] sm:h-[500px]" : "h-80 sm:h-96"}`}>
+  return <div className={`relative bg-[#e7eedf] ${navigationMode ? "h-[min(360px,65dvh)] sm:h-[min(500px,65dvh)]" : story ? "h-[360px] sm:h-[500px]" : "h-80 sm:h-96"}`}>
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" className="absolute inset-0 h-full w-full">
       {data.line.geometry.coordinates.map((segment, index) => <polyline key={index} points={segment.map(([lng, lat]) => point(lng, lat).join(",")).join(" ")} fill="none" stroke="#245b46" strokeWidth="0.7" strokeDasharray="1.4 1" />)}
     </svg>
@@ -36,7 +38,7 @@ function RoutePreview({ stops, selectedId, onSelect, story, progress }: Props) {
   </div>;
 }
 
-export function JourneyMap({ stops, selectedId, onSelect, story = false, progress, locationEnabled = false, currentLocation, navigationRoute, navigationMode = false, travelStatus }: Props) {
+export function JourneyMap({ stops, selectedId, onSelect, story = false, progress, locationEnabled = false, currentLocation, navigationRoute, travelledTrack, navigationMode = false, travelStatus }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("mapbox-gl").Map | null>(null);
   const locationMarker = useRef<import('mapbox-gl').Marker | null>(null);
@@ -45,13 +47,20 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [following, setFollowing] = useState(false);
   const followingRef = useRef(false);
+  const cameraAnchor = useRef<LocationFix | null>(null);
+  const resumeFollow = useRef(false);
   const [cameraState, setCameraState] = useState<NavigationCameraState>('OVERVIEW');
   const token = getMapboxToken();
   const data = useMemo(() => buildMapData(stops), [stops]);
   useEffect(() => { selectRef.current = onSelect; }, [onSelect]);
   useEffect(() => {
+    if (!navigationMode) return;
+    if (travelStatus === 'PAUSED') resumeFollow.current = followingRef.current;
+    else if (travelStatus !== 'ACTIVE') resumeFollow.current = false;
+  }, [navigationMode, travelStatus]);
+  useEffect(() => {
     if (currentLocation) return;
-    const timer = setTimeout(() => { followingRef.current = false; setFollowing(false); }, 0);
+    const timer = setTimeout(() => { followingRef.current = false; cameraAnchor.current = null; setFollowing(false); }, 0);
     return () => clearTimeout(timer);
   }, [currentLocation]);
 
@@ -78,7 +87,7 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
           ...(navigationMode ? { projection: 'mercator', config: { basemap: { show3dObjects: true, show3dBuildings: true, show3dTrees: false, show3dLandmarks: false, lightPreset: 'day' } } } : {}),
           ...(locationEnabled ? { attributionControl: false, performanceMetricsCollection: false } : {}) });
         mapRef.current = map;
-        if (locationEnabled) map.on('movestart', event => { if (event.originalEvent) { followingRef.current = false; setFollowing(false); setCameraState('USER_INTERACTED'); } });
+        if (locationEnabled) map.on('movestart', event => { if (event.originalEvent) { resumeFollow.current = false; followingRef.current = false; setFollowing(false); setCameraState('USER_INTERACTED'); } });
         if (navigationMode) map.on('moveend', () => {
           if (container.current && map) { container.current.dataset.pitch = String(map.getPitch()); container.current.dataset.zoom = String(map.getZoom()); container.current.dataset.bearing = String(map.getBearing()); }
           if (followingRef.current) setCameraState('FOLLOWING');
@@ -111,7 +120,13 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
           map.addLayer({ id: "journey-sequence", type: "line", source: "journey-sequence", ...(navigationMode ? { slot: 'middle' } : {}), paint: { "line-color": "#245b46", "line-width": locationEnabled ? 3 : 4, "line-opacity": locationEnabled ? 0.55 : 0.85, ...(locationEnabled ? { 'line-dasharray': [2, 2] } : {}) }, layout: { "line-join": "round", "line-cap": "round" } });
           setState("ready");
         });
-        map.on("error", fail);
+        map.on("error", event => {
+          if ('sourceId' in event && event.sourceId === 'travelled-track') {
+            if (container.current) container.current.dataset.track = 'unavailable';
+            return;
+          }
+          fail();
+        });
         timeout = setTimeout(fail, 12000);
         observer = new ResizeObserver(() => map?.resize()); observer.observe(container.current);
       } catch { fail(); }
@@ -140,11 +155,18 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
       element.classList.toggle('has-heading', heading !== null);
       element.setAttribute('aria-label', heading !== null ? 'Your current location and reported heading' : 'Your current location');
       locationMarker.current.setRotationAlignment('map').setRotation(heading ?? 0);
-      if (followingRef.current) map?.easeTo(navigationMode ? navigationCamera(currentLocation, window.matchMedia('(prefers-reduced-motion: reduce)').matches) : { center: [currentLocation.longitude, currentLocation.latitude], ...(heading !== null ? { bearing: heading } : {}), zoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600 });
+      if (navigationMode && travelStatus === 'ACTIVE' && resumeFollow.current && freshLocation(currentLocation) && currentLocation.accuracy <= MAX_ARRIVAL_ACCURACY_METERS) {
+        resumeFollow.current = false; followingRef.current = true; setFollowing(true); setCameraState('RECENTERING');
+      }
+      if (followingRef.current && map) {
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const camera = navigationMode ? followNavigationCamera(currentLocation, cameraAnchor.current, map.getBearing(), reducedMotion) : { center: [currentLocation.longitude, currentLocation.latitude] as [number, number], ...(heading !== null ? { bearing: heading } : {}), zoom: 14, padding: { top: 100, bottom: 30, left: 30, right: 30 }, duration: reducedMotion ? 0 : 600 };
+        if (camera) { cameraAnchor.current = currentLocation; map.easeTo(camera); }
+      }
     }
     void update();
     return () => { disposed = true; };
-  }, [currentLocation, state, navigationMode]);
+  }, [currentLocation, state, navigationMode, travelStatus]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -159,9 +181,25 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
     }
   }, [navigationRoute, state, navigationMode]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || state !== 'ready' || !navigationMode || !travelledTrack) return;
+    // Historical GPS geometry updates independently of navigation/camera/map lifetime.
+    try {
+      const line = { type: 'Feature' as const, properties: {}, geometry: travelledTrack };
+      const source = map.getSource('travelled-track') as import('mapbox-gl').GeoJSONSource | undefined;
+      if (source) source.setData(line);
+      else {
+        map.addSource('travelled-track', { type: 'geojson', data: line });
+        map.addLayer({ id: 'travelled-track', source: 'travelled-track', type: 'line', slot: 'middle', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#9333ea', 'line-width': 5, 'line-opacity': 0.9 } }, map.getLayer('travel-navigation-outline') ? 'travel-navigation-outline' : undefined);
+      }
+      if (container.current) container.current.dataset.track = travelledTrack.coordinates.length ? 'recorded' : 'empty';
+    } catch { /* Track rendering must not interrupt GPS, navigation, or arrival. */ }
+  }, [travelledTrack, state, navigationMode]);
+
   function recenter() {
-    if (!currentLocation) return;
-    if (navigationMode) { followingRef.current = true; setFollowing(true); setCameraState('RECENTERING'); }
+    if (!currentLocation || (navigationMode && (!freshLocation(currentLocation) || currentLocation.accuracy > MAX_ARRIVAL_ACCURACY_METERS))) return;
+    if (navigationMode) { cameraAnchor.current = currentLocation; followingRef.current = true; setFollowing(true); setCameraState('RECENTERING'); }
     mapRef.current?.easeTo(navigationMode ? navigationCamera(currentLocation, window.matchMedia('(prefers-reduced-motion: reduce)').matches) : { center: [currentLocation.longitude, currentLocation.latitude], zoom: 13, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400 });
   }
 
@@ -185,13 +223,16 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
 
   const selected = data.markers.find((stop) => stop.id === selectedId);
   const fallback = !token || state === "error" || !data.markers.length;
+  const canFollow = !!currentLocation && (!navigationMode || (freshLocation(currentLocation) && currentLocation.accuracy <= MAX_ARRIVAL_ACCURACY_METERS));
+  const cameraMessage = travelStatus === 'PAUSED' ? 'Navigation paused' : ['COMPLETED', 'CANCELLED'].includes(travelStatus || '') ? 'Navigation stopped' : !currentLocation ? 'Waiting for location' : !canFollow ? 'Waiting for precise GPS' : following ? 'Following your location' : cameraState === 'USER_INTERACTED' ? 'Map moved · tap Center on me' : 'Browse map · Follow when ready';
   return <section aria-label="Journey route map" className={`overflow-hidden rounded-3xl border border-stone-200 bg-white ${story ? '[&_.mapboxgl-popup]:z-[3]' : ''}`}>
-    <div className={fallback ? "hidden" : "relative"}><div ref={container} data-testid="journey-map" data-state={state} data-map-style={navigationMode ? 'standard' : 'streets-v12'} data-camera={navigationMode && travelStatus !== 'ACTIVE' ? travelStatus : !currentLocation ? 'WAITING_GPS' : cameraState} data-navigation={navigationRoute ? 'road-route' : 'none'} className={`w-full ${story ? "h-[360px] sm:h-[500px]" : "h-80 sm:h-96"}`}/>{state === "loading" && !fallback && <p role="status" className="absolute bottom-4 left-4 rounded-xl bg-white p-3 text-sm shadow">Loading journey map…</p>}
-      {locationEnabled && state === 'ready' && <><button type="button" disabled={!currentLocation} onClick={recenter} className="absolute top-3 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">Center on me</button><button type="button" disabled={!currentLocation} aria-pressed={following && !!currentLocation} onClick={() => { followingRef.current = !followingRef.current; setFollowing(followingRef.current); if (followingRef.current) recenter(); else setCameraState('USER_INTERACTED'); }} className="absolute top-16 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">{following && currentLocation ? 'Stop following' : 'Follow'}</button><p className="absolute right-2 bottom-1 rounded bg-white/90 px-2 text-[10px] text-stone-700"><a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">© Mapbox</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></p></>}
+    <div className={fallback ? "hidden" : "relative"}><div ref={container} data-testid="journey-map" data-state={state} data-map-style={navigationMode ? 'standard' : 'streets-v12'} data-camera={navigationMode && travelStatus !== 'ACTIVE' ? travelStatus : !currentLocation ? 'WAITING_GPS' : cameraState} data-navigation={navigationRoute ? 'road-route' : 'none'} className={`w-full ${navigationMode ? "h-[min(360px,65dvh)] sm:h-[min(500px,65dvh)]" : story ? "h-[360px] sm:h-[500px]" : "h-80 sm:h-96"}`}/>{state === "loading" && !fallback && <p role="status" className="absolute bottom-4 left-4 rounded-xl bg-white p-3 text-sm shadow">Loading journey map…</p>}
+      {navigationMode && state === 'ready' && <p role="status" data-testid="camera-status" className="pointer-events-none absolute bottom-9 left-3 z-[4] max-w-[calc(100%-1.5rem)] rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-brand shadow">{cameraMessage}</p>}
+      {locationEnabled && state === 'ready' && <><button type="button" disabled={!canFollow} onClick={recenter} className="absolute top-3 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">Center on me</button><button type="button" disabled={!canFollow} aria-pressed={following && !!currentLocation} onClick={() => { followingRef.current = !followingRef.current; setFollowing(followingRef.current); if (followingRef.current) recenter(); else setCameraState('USER_INTERACTED'); }} className="absolute top-16 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">{following && currentLocation ? 'Stop following' : 'Follow'}</button><p className="absolute right-2 bottom-1 rounded bg-white/90 px-2 text-[10px] text-stone-700"><a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">© Mapbox</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></p></>}
     </div>
-    {fallback && <RoutePreview stops={stops} selectedId={selectedId} onSelect={onSelect} story={story} progress={progress}/>}
-    {story && <p className="border-t border-stone-100 px-5 py-3 text-xs font-semibold text-brand">{stops.length} stops · {data.markers[0]?.name || "Journey overview"}{data.markers.length > 1 ? ` → ${data.markers.at(-1)?.name}` : ""}</p>}
-    {selected && <div role="status" className="border-t border-stone-100 px-5 py-4"><p className="font-semibold">{selected.number}. {selected.name}</p>{selected.description && <p className="mt-1 text-sm text-stone-600">{selected.description}</p>}</div>}
-    <p className="border-t border-stone-100 px-5 py-3 text-xs leading-5 text-stone-500">{locationEnabled ? 'Dashed green connects the creator’s stored stops. Blue shows the calculated road route to your next stop.' : 'Lines connect stored stops in their original sequence, not roads or navigation directions.'}{data.missing ? ` ${data.missing} ${data.missing === 1 ? "stop has" : "stops have"} no coordinates; missing legs are not drawn.` : ""}</p>
+    {fallback && <RoutePreview stops={stops} selectedId={selectedId} onSelect={onSelect} story={story} progress={progress} navigationMode={navigationMode}/>}
+    {story && !navigationMode && <p className="border-t border-stone-100 px-5 py-3 text-xs font-semibold text-brand">{stops.length} stops · {data.markers[0]?.name || "Journey overview"}{data.markers.length > 1 ? ` → ${data.markers.at(-1)?.name}` : ""}</p>}
+    {selected && !navigationMode && <div role="status" className="border-t border-stone-100 px-5 py-4"><p className="font-semibold">{selected.number}. {selected.name}</p>{selected.description && <p className="mt-1 text-sm text-stone-600">{selected.description}</p>}</div>}
+    <p className="border-t border-stone-100 px-5 py-3 text-xs leading-5 text-stone-500">{navigationMode ? 'Green: creator’s planned stops. Blue: live road navigation. Purple: accepted GPS movement; gaps are not invented.' : locationEnabled ? 'Dashed green connects the creator’s stored stops. Blue shows the calculated road route to your next stop.' : 'Lines connect stored stops in their original sequence, not roads or navigation directions.'}{data.missing ? ` ${data.missing} ${data.missing === 1 ? "stop has" : "stops have"} no coordinates; missing legs are not drawn.` : ""}</p>
   </section>;
 }

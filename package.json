@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:db": "node scripts/test-schema.mjs && node scripts/test-creation-schema.mjs",
+    "test:db": "node scripts/test-schema.mjs && node scripts/test-creation-schema.mjs && node scripts/test-track-schema.mjs",
     "test:creation": "playwright test --config playwright.creation.config.ts",
     "test:e2e": "playwright test",
     "seed:demo": "node scripts/generate-demo-seed.mjs"

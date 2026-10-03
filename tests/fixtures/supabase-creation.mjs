@@ -5,7 +5,7 @@ const owner='10000000-0000-0000-0000-000000000001',other='10000000-0000-0000-000
 const fresh='10000000-0000-0000-0000-000000000003';
 const users=new Map([owner,other,fresh].map((id,index)=>[id,{ id,aud:'authenticated',role:'authenticated',email:index===2 ? 'new@example.com' : index ? 'traveler@example.com' : 'creator@example.com',app_metadata:{ provider:'email',providers:['email'] },user_metadata:{ display_name:index===2 ? 'A traveler with a considerably longer display name' : index ? 'Test Traveler' : 'Test Creator' },created_at:new Date().toISOString() }]));
 const profiles=new Map([owner,other,fresh].map((id,index)=>[id,{ id,username:index===2 ? 'new_creator' : index ? 'traveler_b' : 'creator_a',display_name:index===2 ? 'New Traveler' : index ? 'Test Traveler' : 'Test Creator',bio:'',avatar_path:null }]));
-const journeys=new Map(),objects=new Map(),likes=new Set(),saves=new Set();
+const journeys=new Map(),tracks=new Map(),objects=new Map(),likes=new Set(),saves=new Set();
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB9sAAAAASUVORK5CYII=','base64');
 const server=http.createServer(async(request,response)=>{
   response.setHeader('Access-Control-Allow-Origin','http://localhost:3200');
@@ -29,6 +29,23 @@ const server=http.createServer(async(request,response)=>{
   if (url.pathname==='/auth/v1/user') return authenticated ? json(users.get(uid)) : json({ message:'Unauthorized' },401);
   if (url.pathname==='/auth/v1/logout') { response.writeHead(204); return response.end(); }
   if (url.pathname==='/auth/v1/.well-known/jwks.json') return json({ keys:[] });
+  if (url.pathname==='/rest/v1/travel_tracks') {
+    if (!uid) return json({code:'42501',message:'Private'},403);
+    const rows=[...tracks.values()].filter(t=>t.user_id===uid && (!filter('journey_id') || t.journey_id===filter('journey_id')) && (!filter('id') || t.id===filter('id'))).sort((a,b)=>b.started_at.localeCompare(a.started_at)).slice(0,1);
+    return json(rows);
+  }
+  if (url.pathname==='/rest/v1/rpc/append_travel_track') {
+    const p=body.payload;
+    if (!uid || !visible(journeys.get(p.journeyId))) return json({code:'42501',message:'Private'},403);
+    let t=tracks.get(p.id);
+    if (t && t.user_id!==uid) return json({code:'42501',message:'Private'},403);
+    if (!t) { t={id:p.id,journey_id:p.journeyId,user_id:uid,started_at:new Date(p.startedAt).toISOString(),ended_at:null,status:'ACTIVE',points:[],revision:0,last_payload:null}; tracks.set(p.id,t); }
+    if (t.revision===p.revision+1 && JSON.stringify(t.last_payload)===JSON.stringify(p)) return json({revision:t.revision,count:t.points.length});
+    if (t.revision!==p.revision) return json({code:'40001',message:'Conflict'},409);
+    if (['COMPLETED','CANCELLED'].includes(t.status)) return json({code:'22023',message:'Finished'},400);
+    t.points.push(...p.points);t.status=p.status;t.ended_at=p.endedAt===null?null:new Date(p.endedAt).toISOString();t.revision++;t.last_payload=p;
+    return json({revision:t.revision,count:t.points.length});
+  }
   if (url.pathname==='/rest/v1/profiles') {
     const p=profiles.get(filter('id'));
     if (!p || p.id!==uid) return json([]);
@@ -65,7 +82,7 @@ const server=http.createServer(async(request,response)=>{
     let rows=[...journeys.values()].filter(j=>(!filter('id') || (filter('id').startsWith('in.(') ? filter('id').slice(4,-1).split(',').includes(j.id) : filter('id')===j.id)) && (!filter('user_id') || filter('user_id')===j.user_id) && (!filter('status') || filter('status')===j.status) && (!filter('is_demo') || String(j.is_demo)===filter('is_demo')) && (!filter('traveler_type') || j.traveler_type===filter('traveler_type')) && visible(j));
     if (request.method==='DELETE') {
       const owned=rows.filter(j=>j.user_id===uid);
-      for(const j of owned) { journeys.delete(j.id); for(const set of [likes,saves]) for(const key of set) if (key.endsWith(`:${j.id}`)) set.delete(key); for(const copy of journeys.values()) if (copy.copied_from_journey_id===j.id) copy.copied_from_journey_id=null; }
+      for(const j of owned) { journeys.delete(j.id); for(const [key,t] of tracks) if(t.journey_id===j.id) tracks.delete(key); for(const set of [likes,saves]) for(const key of set) if (key.endsWith(`:${j.id}`)) set.delete(key); for(const copy of journeys.values()) if (copy.copied_from_journey_id===j.id) copy.copied_from_journey_id=null; }
       return json(owned.map(j=>({ id:j.id })));
     }
     const orders=(url.searchParams.get('order') || '').split(',');

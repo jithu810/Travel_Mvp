@@ -1,4 +1,4 @@
-# Travel Mode road navigation (Prompts 11–12)
+# Travel Mode road navigation (Prompts 11–13)
 
 ## Provider and configuration
 
@@ -75,13 +75,27 @@ Road distance and driving duration are **totals at the last calculation**, expli
 
 NoRoute/NoSegment, invalid coordinates, malformed JSON/geometry, token/origin rejection, rate limits, network failure, timeout and service errors receive useful safe messages. Retry route is available. None blocks arrival or manual stop progression. Without network, the last valid route for the same destination remains visible with an explicit warning. A new destination discards it even offline. GPS continues independently. There is no offline-navigation promise, map-tile cache or route cache persistence.
 
-Only the current validated fix, last requested origin and one current route exist in memory. There is no GPS history or storage. SessionStorage retains only the existing progress whitelist, never route geometry, GPS fix or heading. No GPS is sent to application APIs, journey records, Supabase, analytics, app URLs or logs. Mapbox necessarily receives origin/destination in the routing POST body and basemap tile requests; this provider data sharing is required for routing. Public token URL parameters follow the provider's API contract and are client safe. The GPS map's optional metrics remain disabled and attribution links remain static without location-bearing feedback URLs.
+Only the current validated fix, last requested origin, one display-only camera anchor and one current route exist in memory. There is no GPS history or storage. SessionStorage retains only the existing progress whitelist, never route geometry, GPS fix or heading. No GPS is sent to application APIs, journey records, Supabase, analytics, app URLs or logs. Mapbox necessarily receives origin/destination in the routing POST body and basemap tile requests; this provider data sharing is required for routing. Public token URL parameters follow the provider's API contract and are client safe. The GPS map's optional metrics remain disabled and attribution links remain static without location-bearing feedback URLs.
+
+## Navigation UX (Prompt 13)
+
+The compact HUD prioritizes the next creator stop, followed by navigation status, calculated road distance/driving duration and a confident provider maneuver. Totals explicitly describe the last route calculation, not a live ETA. Unavailable duration is omitted; unavailable routes do not fabricate totals. The expandable provider instruction list remains a list from that calculation, not a substitute for confident live guidance.
+
+Presentation states distinguish Ready, Waiting for GPS, GPS signal weak/unavailable, Finding route, Route updating, Checking route, Rerouting, waiting to update a stale route, Route unavailable, Paused and completed/ended sessions. Checking uses the existing deviation evidence and does not change request eligibility. “Route updated” expires after five seconds at the next existing lifecycle update (the hook ticks every two seconds). Failed/offline routing retains the same-destination road route, explains its age, offers Retry and preserves manual completion.
+
+Arrival feedback briefly names the completed stop and next target for six seconds, highlights that completed row, and then clears. Manual completion is labeled separately from GPS arrival. Progress shows completed/remaining counts and an accessible current step in unchanged creator order. The original reducer and arrival source of truth remain authoritative. End Journey is separated from routine controls and still requires confirmation; completion offers a stop-count summary and Journey Story link, without travel statistics.
+
+Follow status is visible on the map. Gestures suspend Follow; Center on me restores the existing 45°/16.2 camera. Small changes below eight meters and eight degrees are ignored by the camera; the blue marker still uses the exact current fix. Heading differences wrap at north. Missing/unreliable heading retains the camera orientation. Weak/stale GPS cannot animate or explicitly recenter the navigation camera. One in-memory camera anchor is used for display only, never arrival, routing or track recording.
+
+Pause still stops GPS/navigation. If Follow was enabled before pause, it resumes only after a fresh precise fix; a user-suspended Follow stays suspended. This preference is component-local and is not restored from storage. Map style, custom sources, rerouting thresholds, GPS quality rules and route-request protections are unchanged. Other maps do not opt into this UX. Navigation map/preview height is capped at 65dvh in short viewports so the location and controls remain visible in landscape; portrait and desktop retain the existing maximum heights. Stop buttons have scroll clearance for sticky controls.
+
+Browser/GPS/Directions simulation verifies UI behavior, not outdoor driving. Prompts 12–13 still require physical-device testing for meaningful road deviation, real rerouting, GPS stability, heading and restrained route refresh while moving. Browser background suspension, screen lock, safe areas and mobile browser chrome remain device-dependent. No persistent track, background GPS architecture, Travel Memories, native SDK, voice or offline navigation is added.
 
 ## Verification and phone checklist
 
 Automated tests use mocked browser geolocation and mocked Directions responses with a real GL JS renderer; they do not use the physical machine's location. Unit/controller tests cover coordinate/response/maneuver parsing, optional duration, lifecycle, movement/age throttling, duplicate requests, cancellation/obsolete responses, bounded retries, network failure and route ownership by destination. Browser tests cover the five ordered stops, mobile 360/390 px and desktop, independent route/markers, instructions, heading, Follow/manual pan, next-stop arrival, pause/resume/end, missing coordinates, offline transitions, manual fallback, storage privacy and overflow/control placement. Existing GPS, manual Travel Mode, public, creation/social/discovery/SEO, auth, isolated database/security, TypeScript, lint and build checks remain required.
 
-**Prompt 11 physical-phone verification was reported complete by the user. Prompt 12 rerouting/3D upgrades have not yet been field-tested on a physical phone.** Browser location services, heading quality, GPS drift, background suspension, screen lock and battery policies can differ from mocks. This implementation does not guarantee continuous background navigation.
+**Prompt 11 physical-phone verification was reported complete by the user. Prompts 12–13 rerouting/3D/UX upgrades have not yet been field-tested on a physical phone.** Browser location services, heading quality, GPS drift, background suspension, screen lock and battery policies can differ from mocks. This implementation does not guarantee continuous background navigation.
 
 After deployment, test on HTTPS with an actual phone:
 
@@ -106,3 +120,15 @@ Live local visual QA used the real published Nedumangad → Palode → Thenmala 
 No persistent traveled GPS track, background GPS, Travel Memories, native app, voice navigation, offline navigation, traffic prediction or lane guidance is implemented. No dependency, environment, schema, RLS, authentication or production configuration changes are required.
 
 Final checks: public/unit suite 74 passed (four configured-auth skips); full isolated creation/social/discovery/GPS/navigation suite 54 passed; configured authentication suite eight passed, covering the skipped cases. TypeScript, lint, configured production build, isolated database/security checks and whitespace checks passed. No hosted migration or data mutation was performed.
+
+## Prompt 13 verification record
+
+- Public/unit suite: 80 passed, four configured-auth skips. Separate configured-auth checks: eight passed.
+- Full isolated creation/social/discovery/GPS/navigation run: 54 passed, two GPS consent-copy assertions failed. Restored the pre-start explanation without weakening the tests; all 20 Travel/GPS/navigation checks then passed, including both failures and final landscape/scroll changes.
+- Final TypeScript, lint, configured production build, four isolated database/security check groups and whitespace checks passed.
+- Real published five-stop journey with simulated GPS, actual Mapbox Standard and a reused real Directions response: 360×800, 390×844, 412×915, 844×390, 1280×900 and 1440×900. Pitched 3D map/location visible, separate routes, working HUD/arrival/gestures/recenter/pause/resume/end/completion. All five stop buttons clicked at every viewport; no overflow, control overlap or browser errors. Screenshots inspected.
+- These are browser simulations, not physical outdoor driving verification. No commit, push or deployment is included.
+
+## Prompt 14 integration
+
+The travelled track is now implemented as a third, private GPS-derived source. Earlier Prompt 11–13 statements about no persistent track describe those implementation stages; see [travel-mode.md](travel-mode.md#prompt-14--private-actual-travelled-track) for current privacy, database setup, filtering, limits and phone tests. The Directions adapter, GPS watcher, stop order, arrival reducer, rerouting policy, 3D camera and Prompt 13 HUD are preserved. The purple track source updates independently, above the planned green line and below the blue road layers/DOM markers. Only accepted callbacks extend it; Directions responses never do. Mapbox receives no new track API requests.

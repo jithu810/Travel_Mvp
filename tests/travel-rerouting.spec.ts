@@ -40,11 +40,11 @@ test('confirmed deviation reroutes once to the same destination and resets again
   const destinations: number[] = [];
   const service = new NavigationController(async (origin, destination) => { calls++; destinations.push(destination.latitude); return calls === 1 ? road : parseRoadRoute(directionsResponse([origin.longitude, origin.latitude], [destination.longitude, destination.latitude])); }, value => { state = value; }, () => now);
   service.update(input(fix())); await settle();
-  for (const offset of [30000, 34000]) { now = base + offset; service.update(input(fix(8.616, now))); expect(calls).toBe(1); }
+  for (const offset of [30000, 34000]) { now = base + offset; service.update(input(fix(8.616, now))); expect(calls).toBe(1); expect(state!.checkingRoute).toBe(true); }
   now = base + 38000; service.update(input(fix(8.616, now))); expect(state!.status).toBe('rerouting'); expect(state!.routeStale).toBe(true);
   service.update(input(fix(8.616, now))); expect(calls).toBe(2); await settle(); expect(state!.notice).toBe('Route updated'); expect(state!.routeStale).toBe(false); expect(destinations).toEqual([8.603315, 8.603315]);
   for (const offset of [40000, 44000, 48000, 60000, 68000, 72000, 76000, 80000, 84000, 88000, 92000, 96000]) { now = base + offset; service.update(input(fix(8.619, now))); }
-  expect(calls).toBe(2);
+  expect(calls).toBe(2); expect(state!.notice).toBe('');
   now = base + 38000 + MIN_REROUTE_INTERVAL_MS; service.update(input(fix(8.619, now))); expect(calls).toBe(3); await settle();
   service.stop();
 });
