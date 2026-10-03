@@ -1,14 +1,14 @@
 import type { Page } from '@playwright/test';
 
-export type GpsMock = { watches: number; clears: number; active: number; permission: PermissionState; emit: (latitude: number, longitude: number, accuracy?: number, timestamp?: number) => void; fail: (code: number) => void; late: () => void };
+export type GpsMock = { watches: number; clears: number; active: number; permission: PermissionState; emit: (latitude: number, longitude: number, accuracy?: number, timestamp?: number, heading?: number | null) => void; fail: (code: number) => void; late: () => void };
 export async function mockGeolocation(page: Page, permission: PermissionState = 'prompt') {
   await page.addInitScript(permission => {
     let nextId = 0;
     const active = new Map<number, { success: PositionCallback; error?: PositionErrorCallback | null }>();
     const old: PositionCallback[] = [];
     const mock = { watches: 0, clears: 0, get active() { return active.size; }, permission,
-      emit(latitude: number, longitude: number, accuracy = 10, timestamp = Date.now()) {
-        const position = { coords: { latitude, longitude, accuracy, heading: 0, speed: 0, altitude: null, altitudeAccuracy: null }, timestamp } as GeolocationPosition;
+      emit(latitude: number, longitude: number, accuracy = 10, timestamp = Date.now(), heading: number | null = null) {
+        const position = { coords: { latitude, longitude, accuracy, heading, speed: 0, altitude: null, altitudeAccuracy: null }, timestamp } as GeolocationPosition;
         for (const watch of [...active.values()]) watch.success(position);
       },
       fail(code: number) { for (const watch of [...active.values()]) watch.error?.({ code, message: 'Mock error' } as GeolocationPositionError); },

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mockGeolocation, emitLocation, gpsCounts, type GpsMock } from '../fixtures/geolocation';
+import { mockDirections } from '../fixtures/directions';
 
 const owner = '10000000-0000-0000-0000-000000000001';
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -16,6 +17,7 @@ test('GPS five-stop journey lifecycle, ordered arrivals, fresh refresh and map p
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   page.on('request', request => outbound.push(request.url() + (request.postData() || '')));
   await mockGeolocation(page);
+  await mockDirections(page);
   // Keep GPS tests deterministic while exercising the real Mapbox renderer/markers/line.
   // The separately performed live visual QA uses the configured real basemap.
   await page.route('**/styles/v1/mapbox/streets-v12*', route => route.fulfill({ json: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#e7eedf' } }] } }));
@@ -39,7 +41,7 @@ test('GPS five-stop journey lifecycle, ordered arrivals, fresh refresh and map p
     await expect(page.getByTestId('gps-status')).toHaveAttribute('data-status', 'REQUESTING');
     await expect.poll(async () => (await gpsCounts(page)).active).toBe(1);
     await expect(page.getByTestId('journey-map')).toHaveAttribute('data-state', 'ready', { timeout: 30000 });
-    // A distinct location not present in public data must never be sent to an API or URL.
+    // Private position may go only to the routing provider's POST body, never app APIs/URLs.
     const privatePoint = [8.613271839, 77.012719183];
     await emitLocation(page, privatePoint[0], privatePoint[1]);
     await expect(page.getByTestId('gps-status')).toHaveAttribute('data-status', 'AVAILABLE');
@@ -117,14 +119,16 @@ test('GPS five-stop journey lifecycle, ordered arrivals, fresh refresh and map p
     await page.getByRole('link', { name: 'Back to Journey', exact: false }).click();
     await expect(page).toHaveURL(`/journey/${id}`);
     await expect.poll(async () => (await gpsCounts(page)).active).toBe(0);
-    expect(outbound.some(text => /directions\/|navigation\/|optimization\//.test(text))).toBe(false);
-    expect(outbound.some(text => privatePoint.some(coordinate => text.includes(String(coordinate))))).toBe(false);
+    const nonRouting = outbound.filter(text => !text.startsWith('https://api.mapbox.com/directions/v5/mapbox/driving?'));
+    expect(nonRouting.some(text => /navigation\/|optimization\//.test(text))).toBe(false);
+    expect(nonRouting.some(text => privatePoint.some(coordinate => text.includes(String(coordinate))))).toBe(false);
     expect(errors).toEqual([]); expect(consoleErrors).toEqual([]);
   } finally { await request.delete(`http://127.0.0.1:54329/rest/v1/journeys?id=eq.${id}`, { headers }); }
 });
 
 test('expired current location disappears even without a new reading and map failure does not block progress', async ({ page }) => {
   await mockGeolocation(page, 'granted');
+  await mockDirections(page);
   await page.clock.install();
   await page.route('**/styles/v1/**', route => route.abort());
   await page.goto('/travel/demo-goa-couple');
@@ -163,6 +167,7 @@ test('denied permission is not repeatedly requested and manual fallback remains 
 test('GPS errors, insecure context and missing-coordinate stops degrade safely', async ({ page, request }) => {
   const id = crypto.randomUUID();
   await mockGeolocation(page, 'granted');
+  await mockDirections(page);
   try {
     expect((await request.post('http://127.0.0.1:54329/rest/v1/rpc/save_journey', { headers, data: { payload: {
       id, title: 'Missing GPS coordinates', destination_slug: 'goa', traveler_type: 'solo', duration_days: 1, status: 'published', cover_image_path: null,

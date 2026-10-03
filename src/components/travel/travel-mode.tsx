@@ -11,6 +11,8 @@ import { TravelDialog } from './travel-dialog';
 import { arrivalEvent, distanceMeters, formatDistance } from '@/lib/travel/location';
 import { useTravelLocation } from './use-travel-location';
 import { GpsStatus } from './gps-status';
+import { useTravelNavigation } from './use-travel-navigation';
+import { NavigationPanel } from './navigation-panel';
 
 const primary = 'min-h-12 rounded-full bg-brand px-6 text-sm font-semibold text-white disabled:opacity-50';
 const secondary = 'min-h-12 rounded-full border border-stone-300 bg-white px-5 text-sm font-semibold text-brand';
@@ -62,15 +64,18 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
 
   const count = session.completedIds.length;
   const next = stops[count];
+  const navigationInput = useMemo(() => ({ status: session.status, destination: next, fix: gps.fix }), [session.status, next, gps.fix]);
+  const navigation = useTravelNavigation(navigationInput);
   const finished = session.status === 'COMPLETED';
   const cancelled = session.status === 'CANCELLED';
   const progress = useMemo(() => ({ completedIds: session.completedIds, currentId: finished || cancelled ? null : stops[session.completedIds.length]?.id || null }), [session.completedIds, stops, finished, cancelled]);
   const percentage = stops.length ? Math.round(count / stops.length * 100) : 0;
 
   return <article data-testid="travel-mode" data-state={session.status} className="space-y-6 sm:space-y-8">
-    <header><Link href={`/journey/${encodeURIComponent(journey.id)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">← Back to Journey</Link><p className="mt-2 text-xs font-semibold tracking-wider text-brand uppercase">Travel Mode · GPS assisted</p><h1 className="mt-3 break-words text-3xl font-semibold tracking-tight sm:text-4xl">{journey.title}</h1><p className="mt-3 text-sm leading-6 text-stone-600">Journey Creator uses your location to show where you are and automatically detect when you reach journey stops. Location access begins when you start. Progress stays in this browser tab and isn’t synced to an account.</p></header>
-    <JourneyMap stops={stops} selectedId={progress.currentId} onSelect={id => setDetail(stops.find(stop => stop.id === id) || null)} story progress={progress} locationEnabled currentLocation={gps.fix}/>
-    <p className="text-xs leading-6 text-stone-600">✓ Completed · ● Current / next · ○ Upcoming · Blue dot: you are here. The map shows the planned stop sequence, not an actual traveled path.</p>
+    <header><Link href={`/journey/${encodeURIComponent(journey.id)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">← Back to Journey</Link><p className="mt-2 text-xs font-semibold tracking-wider text-brand uppercase">Travel Mode · GPS assisted</p><h1 className="mt-3 break-words text-3xl font-semibold tracking-tight sm:text-4xl">{journey.title}</h1><p className="mt-3 text-sm leading-6 text-stone-600">Journey Creator uses your location to show where you are, calculate road directions with Mapbox, and automatically detect when you reach journey stops. Location access begins when you start. Progress stays in this browser tab and isn’t synced to an account.</p></header>
+    <JourneyMap stops={stops} selectedId={progress.currentId} onSelect={id => setDetail(stops.find(stop => stop.id === id) || null)} story progress={progress} locationEnabled currentLocation={gps.fix} navigationRoute={navigation.route?.geometry}/>
+    <p className="text-xs leading-6 text-stone-600">✓ Completed · ● Current / next · ○ Upcoming · Blue dot: you are here · Blue line: road navigation · Dashed green: planned journey. No actual traveled track is recorded.</p>
+    <NavigationPanel navigation={navigation} destination={next} status={session.status} fix={gps.fix} retry={navigation.retry}/>
     <GpsStatus status={gps.status} fix={gps.fix} travelStatus={session.status} retry={gps.retry}/>
     {!ready && <p role="status" className="text-sm text-stone-500">Checking this tab’s simulation…</p>}
     {!storageAvailable && <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">Browser storage is unavailable. You can still follow this journey, but progress will reset after a refresh.</p>}

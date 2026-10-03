@@ -37,7 +37,7 @@ Stops missing coordinates remain in the list and must be completed manually. Mar
 
 ## Map, privacy and persistence
 
-The existing line always represents the creator's planned stop order. Current position is a separate blue DOM marker; it does not change that line. Center on me moves the camera only on an explicit click. GPS updates do not continuously recenter the map. Missing map support leaves the stop list, distance and manual controls usable.
+The existing line always represents the creator's planned stop order. Current position is a separate blue DOM marker; it does not change that line. Center on me explicitly recenters the map; Prompt 11 adds opt-in Follow, suspended by manual pan/zoom. Missing map support leaves the stop list, distance and manual controls usable.
 
 Only one current fix (latitude, longitude, accuracy, timestamp, optional valid heading/speed) exists in memory; no location history is collected. Fixes are never written into journey data, Supabase, browser storage, application URLs or application analytics/logging. The GPS-enabled map disables optional performance metrics and uses static attribution links without the dynamic map-feedback URL. Mapbox still supplies the basemap and can see requested tile areas, particularly when Center on me loads nearby tiles; this is not a private/offline basemap.
 
@@ -47,7 +47,9 @@ Existing versioned sessionStorage stores only journey ID, ordered stop IDs, comp
 
 Browser permission and suitable hardware/service availability are required. Browser geolocation can use the device/browser's location service; satellite GPS quality is not guaranteed. Background tabs, screen locks and OS/browser power policies may suspend updates. Continuous background tracking and offline use are not guaranteed. Resume/refresh needs fresh readings. A future native/PWA implementation may be needed for reliable background travel.
 
-Future navigation, ETA and actual track recording must be separate adapters. They must never replace the planned journey model/line. No Directions API, Navigation SDK, road snapping, navigation instructions, traffic, rerouting, actual persistent GPS track, travel memories, new tables, migrations or RLS are included. No production/deployment configuration changes are required.
+## Road navigation integration
+
+Prompt 11 adds a separate Directions API adapter, independent blue road-route source, provider maneuvers, driving duration estimate and opt-in Follow. It uses the sole existing GPS fix and next ordered stop, with request cancellation/throttling and offline/error manual fallback. See [travel-navigation.md](travel-navigation.md) for architecture, named limits, configuration, privacy and the phone checklist. Routing necessarily sends coordinates to Mapbox in a POST body; application URLs/APIs/storage/logs remain free of GPS data. No native SDK, traffic claims, voice, aggressive rerouting, persistent GPS track, Travel Memories, new tables, migrations or RLS are included. No production/deployment configuration changes are required. Physical-device road navigation remains NOT FIELD-TESTED.
 
 ## Verification and changed files
 
