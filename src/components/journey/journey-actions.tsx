@@ -18,10 +18,12 @@ export function JourneyActions({ id, title, isPublic, initialLikes }: Props) {
   const likes = state?.likes ?? initialLikes;
   const [busy, setBusy] = useState(false);
   const [login, setLogin] = useState(false);
+  const [intent, setIntent] = useState<'like' | 'save' | 'copy'>('save');
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
 
   async function act(action: "like" | "save" | "copy") {
+    setIntent(action);
     if (!user) { setLogin(true); return; }
     setBusy(true); setMessage(""); setFailed(false);
     try {
@@ -51,14 +53,14 @@ export function JourneyActions({ id, title, isPublic, initialLikes }: Props) {
   return <div className="space-y-3">
     <div className="flex flex-wrap gap-2">
       <button disabled={busy || loading || !!stateError || !isPublic} onClick={() => act("like")} aria-pressed={liked} aria-label={liked ? "Unlike journey" : "Like journey"} className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-60">{liked ? "♥" : "♡"} {likes} <span className="sr-only">likes</span></button>
-      <button disabled={busy || loading || !!stateError || !isPublic} onClick={() => act("save")} aria-pressed={saved} className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-60">{saved ? "Saved ✓" : "Save"}</button>
+      <button disabled={busy || loading || !!stateError || !isPublic} onClick={() => act("save")} aria-pressed={saved} title="Keep this journey for later" className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-60">{saved ? "Saved ✓" : "Save"}</button>
       <button disabled={!isPublic} onClick={share} title={isPublic ? "Share public journey" : "Private journeys cannot be shared publicly"} className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-40">Share ↗</button>
-      {isPublic && <a href="#journey-route" className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">Use This Journey</a>}
+      {isPublic && <a href="#journey-route" title="Explore the creator’s ordered stops as your route" className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">Use This Journey</a>}
       <button disabled={busy || loading || !!stateError || !isPublic} onClick={() => act("copy")} className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-60">{busy ? "Working…" : "Remix This Journey"}</button>
     </div>
-    {isPublic && <p className="text-xs leading-5 text-stone-500">Use the creator’s ordered stops below as your travel plan. Remix creates your own editable copy.</p>}
+    {isPublic && <p className="max-w-2xl text-xs leading-6 text-stone-500">Save keeps this journey for later. Use This Journey lets you explore the creator’s ordered stops. Remix creates your own editable version.</p>}
     {stateError && <p role="alert" className="text-sm text-red-700">{stateError}</p>}
     {message && <p role={failed ? "alert" : "status"} className={`break-words text-sm ${failed ? "text-red-700" : "text-brand"}`}>{message}</p>}
-    {login && <LoginDialog onClose={() => setLogin(false)} onLogin={() => { setLogin(false); refresh(); router.refresh(); }}/>}
+    {login && <LoginDialog intent={intent} onClose={() => setLogin(false)} onLogin={() => { setLogin(false); refresh(); router.refresh(); }}/>}
   </div>;
 }

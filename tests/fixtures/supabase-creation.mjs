@@ -2,8 +2,9 @@
 // are checked against real migration SQL in the database test scripts.
 import http from 'node:http';
 const owner='10000000-0000-0000-0000-000000000001',other='10000000-0000-0000-0000-000000000002';
-const users=new Map([owner,other].map((id,index)=>[id,{ id,aud:'authenticated',role:'authenticated',email:index ? 'traveler@example.com' : 'creator@example.com',app_metadata:{ provider:'email',providers:['email'] },user_metadata:{ display_name:index ? 'Test Traveler' : 'Test Creator' },created_at:new Date().toISOString() }]));
-const profiles=new Map([owner,other].map((id,index)=>[id,{ id,username:index ? 'traveler_b' : 'creator_a',display_name:index ? 'Test Traveler' : 'Test Creator',bio:'',avatar_path:null }]));
+const fresh='10000000-0000-0000-0000-000000000003';
+const users=new Map([owner,other,fresh].map((id,index)=>[id,{ id,aud:'authenticated',role:'authenticated',email:index===2 ? 'new@example.com' : index ? 'traveler@example.com' : 'creator@example.com',app_metadata:{ provider:'email',providers:['email'] },user_metadata:{ display_name:index===2 ? 'A traveler with a considerably longer display name' : index ? 'Test Traveler' : 'Test Creator' },created_at:new Date().toISOString() }]));
+const profiles=new Map([owner,other,fresh].map((id,index)=>[id,{ id,username:index===2 ? 'new_creator' : index ? 'traveler_b' : 'creator_a',display_name:index===2 ? 'New Traveler' : index ? 'Test Traveler' : 'Test Creator',bio:'',avatar_path:null }]));
 const journeys=new Map(),objects=new Map(),likes=new Set(),saves=new Set();
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB9sAAAAASUVORK5CYII=','base64');
 const server=http.createServer(async(request,response)=>{
@@ -49,7 +50,8 @@ const server=http.createServer(async(request,response)=>{
     const input=body.payload,current=journeys.get(input.id);
     if (current && current.user_id!==uid) return json({ code:'42501',message:'Owner only' },403);
     if (current && current.updated_at!==input.updated_at) return json({ code:'40001',message:'Conflict' },409);
-    const saved={ ...current,...input,user_id:uid,published_at:input.status==='published' ? current?.published_at || new Date().toISOString() : null,updated_at:new Date().toISOString(),is_demo:false };
+    const destination={ goa:['Goa',15.49,73.83],varkala:['Varkala',8.74,76.72],munnar:['Munnar',10.09,77.06],kochi:['Kochi',9.97,76.28],thenkasi:['Thenkasi',8.96,77.31] }[input.destination_slug];
+    const saved={ ...current,...input,destination_name:destination?.[0],destination_latitude:destination?.[1],destination_longitude:destination?.[2],user_id:uid,published_at:input.status==='published' ? current?.published_at || new Date().toISOString() : null,updated_at:new Date().toISOString(),is_demo:false };
     journeys.set(input.id,saved); return json({ id:saved.id,status:saved.status,updated_at:saved.updated_at });
   }
   if (url.pathname==='/rest/v1/rpc/copy_journey') {
@@ -60,13 +62,17 @@ const server=http.createServer(async(request,response)=>{
     return json(id);
   }
   if (url.pathname==='/rest/v1/journeys') {
-    const rows=[...journeys.values()].filter(j=>(!filter('id') || filter('id')===j.id) && (!filter('user_id') || filter('user_id')===j.user_id) && (!filter('status') || filter('status')===j.status) && visible(j));
+    let rows=[...journeys.values()].filter(j=>(!filter('id') || (filter('id').startsWith('in.(') ? filter('id').slice(4,-1).split(',').includes(j.id) : filter('id')===j.id)) && (!filter('user_id') || filter('user_id')===j.user_id) && (!filter('status') || filter('status')===j.status) && (!filter('is_demo') || String(j.is_demo)===filter('is_demo')) && (!filter('traveler_type') || j.traveler_type===filter('traveler_type')) && visible(j));
     if (request.method==='DELETE') {
       const owned=rows.filter(j=>j.user_id===uid);
       for(const j of owned) { journeys.delete(j.id); for(const set of [likes,saves]) for(const key of set) if (key.endsWith(`:${j.id}`)) set.delete(key); for(const copy of journeys.values()) if (copy.copied_from_journey_id===j.id) copy.copied_from_journey_id=null; }
       return json(owned.map(j=>({ id:j.id })));
     }
-    return json(rows.map(j=>({ ...j,stops:undefined })));
+    const orders=(url.searchParams.get('order') || '').split(',');
+    if (orders.length) rows.sort((a,b)=> { for (const order of orders) { const [key,direction]=order.split('.');const x=a[key] || '',y=b[key] || '';if(x!==y) return (x<y ? -1 : 1)*(direction==='desc' ? -1 : 1); } return 0; });
+    const offset=Number(url.searchParams.get('offset') || 0),limit=Number(url.searchParams.get('limit') || rows.length);
+    rows=rows.slice(offset,offset+limit);
+    return json(rows.map(j=>({ ...j,stops:undefined,...(url.searchParams.get('select')?.includes('journey_stops(') ? { journey_stops:j.stops } : {}) })));
   }
   if (url.pathname==='/rest/v1/journey_stops') {
     const j=journeys.get(filter('journey_id'));
@@ -79,7 +85,7 @@ const server=http.createServer(async(request,response)=>{
     if (request.method==='POST') { if (body.user_id!==uid || journeys.get(body.journey_id)?.status!=='published') return json({ code:'42501',message:'Published only' },403); set.add(relation(body.journey_id)); return json([]); }
     return json([...set].filter(key=>key.startsWith(`${uid}:`)).map(key=>({ user_id:uid,journey_id:key.slice(uid.length+1) })));
   }
-  if (url.pathname==='/rest/v1/rpc/get_public_journeys') return json([...journeys.values()].filter(j=>j.status==='published' && (!body.journey_filter || body.journey_filter===j.id) && (!body.destination_filter || j.destination_slug===body.destination_filter) && (!body.traveler_filter || j.traveler_type===body.traveler_filter)).map(card));
+  if (url.pathname==='/rest/v1/rpc/get_public_journeys') return json([...journeys.values()].filter(j=>j.status==='published' && (!body.journey_filter || body.journey_filter===j.id) && (!body.destination_filter || j.destination_slug===body.destination_filter) && (!body.traveler_filter || j.traveler_type===body.traveler_filter)).sort((a,b)=>(b.published_at || '').localeCompare(a.published_at || '') || a.id.localeCompare(b.id)).slice(0,100).map(card));
   if (url.pathname==='/rest/v1/rpc/get_journey_detail') { const j=journeys.get(body.target_id); return json(visible(j) ? card(j) : null); }
   if (url.pathname.startsWith('/storage/v1/object/sign/')) {
     if (request.method==='GET') { response.writeHead(200,{ 'Content-Type':'image/png' }); return response.end(png); }

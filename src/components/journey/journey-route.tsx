@@ -1,24 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import Link from 'next/link';
 import { JourneyMap } from "@/components/map/journey-map";
-import { TravelImage } from "@/components/ui/travel-image";
+import { StopPhoto } from './stop-photo';
 import { orderedStops } from "@/lib/journey/map-data";
 import type { JourneyStop } from "@/lib/journey/types";
 
-export function JourneyRoute({ stops }: { stops: JourneyStop[] }) {
+export function JourneyRoute({ stops, children, travelHref }: { stops: JourneyStop[]; children?: ReactNode; travelHref?: string }) {
   const [selected, setSelected] = useState<string | null>(null);
-  const sorted = orderedStops(stops);
-  return <div id="journey-route" className="grid scroll-mt-6 items-start gap-8 lg:grid-cols-[1.05fr_1fr]">
-    <section className="space-y-4 lg:sticky lg:top-6"><h2 className="text-2xl font-semibold">The journey, on a map</h2><JourneyMap stops={stops} selectedId={selected} onSelect={setSelected}/></section>
-    <section aria-labelledby="route-stops"><h2 id="route-stops" className="mb-6 text-2xl font-semibold">The places along the way</h2>
-      {!sorted.length && <p className="rounded-2xl border border-stone-200 bg-white p-6 text-sm text-stone-500">The creator has not added stops yet.</p>}
-      <ol className="space-y-5">{sorted.map((stop, index) => <li key={stop.id} data-testid="journey-stop" data-sequence={stop.sequence} className="relative pl-14">
-        {index < sorted.length - 1 && <div aria-hidden="true" className="absolute top-11 bottom-[-20px] left-5 w-px bg-stone-200"/>}
-        <button type="button" aria-label={`Select stop ${index + 1}: ${stop.name}`} aria-pressed={selected === stop.id} onClick={() => setSelected(stop.id)} className={`absolute top-1 left-0 flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold ${selected === stop.id ? "bg-amber-600 text-white" : "bg-brand text-white"}`}>{index + 1}</button>
-        <div className={`overflow-hidden rounded-2xl border bg-white ${selected === stop.id ? "border-brand ring-1 ring-brand" : "border-stone-200"}`}>
-          {stop.photo && <div className="relative aspect-[16/9]"><TravelImage src={stop.photo} alt={stop.name} sizes="(max-width: 1024px) 100vw, 450px"/></div>}
-          <div className="p-5">{stop.dayNumber != null && <p className="mb-2 text-xs font-semibold text-brand">Day {stop.dayNumber}</p>}<h3><button type="button" onClick={() => setSelected(stop.id)} className="min-h-11 text-left font-semibold">{stop.name}</button></h3>{stop.description && <p className="mt-1 text-sm leading-6 text-stone-600">{stop.description}</p>}{stop.rating != null && Number.isFinite(stop.rating) && <p className="mt-3 text-xs text-stone-500">Stop rating: {stop.rating.toFixed(1)} / 5</p>}</div>
+  const sorted = useMemo(() => orderedStops(stops), [stops]);
+  function selectFromMap(id: string) {
+    setSelected(id);
+    const element = document.getElementById(`story-stop-${id}`);
+    element?.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    element?.focus({ preventScroll: true });
+  }
+  return <div className="space-y-10 sm:space-y-14">
+    <section id="journey-route" aria-label="Journey map overview" className="scroll-mt-6"><JourneyMap stops={stops} selectedId={selected} onSelect={selectFromMap} story />
+      {travelHref && <div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-xl text-sm leading-6 text-stone-600">Follow the creator’s stops in Travel Mode. GPS can detect arrivals after you start; manual completion remains available. Progress stays in this browser tab.</p><Link href={travelHref} className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">Preview Travel Mode →</Link></div>}
+    </section>
+    {children}
+    <section aria-labelledby="route-stops" className="mx-auto max-w-3xl">
+      <p className="text-xs font-semibold tracking-[0.18em] text-brand uppercase">Journey story</p><h2 id="route-stops" className="mt-3 mb-8 text-3xl font-semibold tracking-tight">The places along the way</h2>
+      {!sorted.length && <p className="py-6 text-sm text-stone-500">The creator has not added stops yet.</p>}
+      <ol>{sorted.map((stop, index) => <li key={stop.id} id={`story-stop-${stop.id}`} tabIndex={-1} data-testid="journey-stop" data-sequence={stop.sequence} className={`relative scroll-mb-24 pb-10 pl-14 outline-brand sm:pb-14 sm:pl-20 ${selected === stop.id ? 'rounded-2xl bg-[#e7eedf]/50' : ''}`}>
+        {index < sorted.length - 1 && <div aria-hidden="true" className="absolute top-12 bottom-0 left-5 w-px bg-stone-300 sm:left-6" />}
+        <button type="button" aria-label={`Select stop ${index + 1}: ${stop.name}`} aria-pressed={selected === stop.id} onClick={() => setSelected(stop.id)} className={`absolute top-0 left-0 flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold sm:h-12 sm:w-12 ${selected === stop.id ? 'bg-amber-600 text-white' : 'bg-brand text-white'}`}>{index + 1}</button>
+        <div className="min-w-0 pt-1 pr-3"><p className="text-xs font-semibold tracking-wider text-brand uppercase">{stop.dayNumber != null ? `Day ${stop.dayNumber} · Stop ${index + 1}` : `Stop ${index + 1}`}</p>
+          <h3 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl"><button type="button" onClick={() => setSelected(stop.id)} className="min-h-11 text-left">{stop.name}</button></h3>
+          {stop.description && <p className="mt-3 whitespace-pre-line text-base leading-7 text-stone-600">{stop.description}</p>}
+          {stop.photo && <StopPhoto key={stop.photo} src={stop.photo} name={stop.name} />}
+          {stop.rating != null && Number.isFinite(stop.rating) && <p className="mt-4 text-xs text-stone-500">Stop rating: {stop.rating.toFixed(1)} / 5</p>}
         </div>
       </li>)}</ol>
     </section>

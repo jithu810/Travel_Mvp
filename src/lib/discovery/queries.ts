@@ -6,6 +6,9 @@ import { demoJourneys } from "./demo";
 import { getDestination } from "./destinations";
 import type { DiscoveryResult, Journey, TravelerFilter } from "./types";
 import { resolveMedia } from '@/lib/journey/media';
+import { matchesDestination, type SelectedDestination } from './selected-destination';
+import type { ExploreResult } from './explore-types';
+import { matchesStop, storedCoordinates } from './explore-geography';
 
 export type PublicRow = {
   id: string; title: string; description: string | null; destination_slug: string;
@@ -34,14 +37,19 @@ export function normalize(row: PublicRow): Journey {
   };
 }
 
-async function fetchPublished(destination?: string, traveler: TravelerFilter = "all", id?: string) {
+function publicClient() {
   const config = getSupabaseConfig();
   if (!config) return null;
   // Public discovery intentionally uses the anon/publishable key and no session.
-  const client = createClient<Database>(config.url, config.key, {
+  return createClient<Database>(config.url, config.key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store", signal: AbortSignal.timeout(8000) }) },
   });
+}
+
+async function fetchPublished(destination?: string, traveler: TravelerFilter = "all", id?: string) {
+  const client = publicClient();
+  if (!client) return null;
   const { data, error } = await client.rpc("get_public_journeys", {
     ...(destination ? { destination_filter: destination } : {}),
     ...(traveler !== "all" ? { traveler_filter: traveler } : {}),
@@ -51,6 +59,11 @@ async function fetchPublished(destination?: string, traveler: TravelerFilter = "
   const rows = data as unknown as PublicRow[];
   const media = await resolveMedia(client, rows.flatMap(row => [row.cover_image_path,row.creator_avatar]));
   return rows.map(row => normalize({ ...row, cover_image_path: media.get(row.cover_image_path || '') || row.cover_image_path,creator_avatar: media.get(row.creator_avatar || '') || row.creator_avatar }));
+}
+
+// Keep the existing destination-query entry point compatible with Explore.
+export async function getDestinationJourneys(selected: SelectedDestination, traveler: TravelerFilter): Promise<DiscoveryResult> {
+  return getExploreJourneys(selected, traveler);
 }
 
 export async function getJourneys(destination?: string, traveler: TravelerFilter = "all"): Promise<DiscoveryResult> {
@@ -65,6 +78,56 @@ export async function getJourneys(destination?: string, traveler: TravelerFilter
   } catch {
     return { journeys: demo, source: "demo", error: "Published journeys couldn't be loaded. Showing demo journeys while you explore." };
   }
+}
+
+// Public-only parent filtering and anonymous RLS also protect embedded stops.
+// Fetch stops with their journeys, never once per stop or once per journey.
+export async function getExploreJourneys(selected: SelectedDestination | null, traveler: TravelerFilter): Promise<ExploreResult> {
+  const empty: ExploreResult = { journeys: [], source: 'supabase', loaded: false };
+  const client = publicClient();
+  if (!client) return empty;
+  try {
+    const query = () => {
+      let request = client.from('journeys')
+        .select('id,destination_slug,destination_name,destination_latitude,destination_longitude,published_at,journey_stops(id,name,sequence,latitude,longitude,mapbox_place_id)')
+        .eq('status', 'published').eq('is_demo', false).order('published_at', { ascending: false }).order('id');
+      if (traveler !== 'all') request = request.eq('traveler_type', traveler);
+      return request;
+    };
+    type Row = NonNullable<Awaited<ReturnType<typeof query>>['data']>[number];
+    const matches: Row[] = [];
+    for (let offset = 0; matches.length < 100; offset += 100) {
+      const { data, error } = await query().range(offset, offset + 99);
+      if (error) throw error;
+      for (const row of data) if (row.destination_slug && (!selected || matchesDestination(selected, row) || row.journey_stops.some(stop => matchesStop(selected, stop)))) matches.push(row);
+      if (!selected || data.length < 100) break;
+    }
+    const rows = matches.slice(0, 100);
+    if (!rows.length) return { ...empty, loaded: true };
+    const slugs = [...new Set(rows.map(row => row.destination_slug!))];
+    const cards = new Map<string, Journey>();
+    for (let index = 0; index < slugs.length; index += 5) {
+      const batches = await Promise.all(slugs.slice(index, index + 5).map(slug => fetchPublished(slug, traveler)));
+      for (const journey of batches.flatMap(batch => batch || [])) if (!journey.isDemo) cards.set(journey.id, journey);
+    }
+    // The existing RPC caps each destination at its newest 100. A stop search
+    // can match an older journey; use its existing ID filter only when needed.
+    const missing = rows.filter(row => !cards.has(row.id));
+    for (let index = 0; index < missing.length; index += 5) {
+      const batches = await Promise.all(missing.slice(index, index + 5).map(row => fetchPublished(undefined, traveler, row.id)));
+      for (const journey of batches.flatMap(batch => batch || [])) if (!journey.isDemo) cards.set(journey.id, journey);
+    }
+    return { ...empty, loaded: true, journeys: rows.flatMap(row => {
+      const journey = cards.get(row.id);
+      if (!journey) return [];
+      const stops = [...row.journey_stops].sort((a, b) => a.sequence - b.sequence);
+      return [{ ...journey, destinationName: row.destination_name || getDestination(journey.destinationSlug)?.name || journey.destinationSlug,
+        coordinates: storedCoordinates(row.destination_latitude, row.destination_longitude),
+        mapStops: stops.map(stop => ({ id: stop.id, name: stop.name, position: stop.sequence, coordinates: storedCoordinates(stop.latitude, stop.longitude) })),
+        matchingStops: selected ? [...new Set(stops.filter(stop => matchesStop(selected, stop)).map(stop => stop.name))] : [],
+      }];
+    }) };
+  } catch { return { ...empty, error: 'Published journeys could not be loaded. Please try again.' }; }
 }
 
 export async function getJourney(id: string): Promise<{ journey: Journey | null; error?: string }> {

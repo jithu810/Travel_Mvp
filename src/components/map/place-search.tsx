@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
 import { getMapboxToken } from '@/lib/env';
+import { searchMapboxPlaces, type MapboxFeature } from '@/lib/mapbox/geocoding';
 export type Place = { name: string; latitude: number; longitude: number; mapboxId: string | null };
-type Result = { id: string; geometry?: { coordinates?: number[] }; properties?: { name?: string; full_address?: string; mapbox_id?: string } };
+type Result = MapboxFeature;
 export function PlaceSearch({ onAdd, latitude, longitude, disabled }: { onAdd: (place: Place) => boolean; latitude: number; longitude: number; disabled?: boolean }) {
   const [query,setQuery] = useState('');
   const [results,setResults] = useState<Result[]>([]);
@@ -21,13 +22,8 @@ export function PlaceSearch({ onAdd, latitude, longitude, disabled }: { onAdd: (
     const timer = setTimeout(async () => {
       setLoading(true); setError('');
       try {
-        const url = new URL('https://api.mapbox.com/search/geocode/v6/forward');
-        url.search = new URLSearchParams({ q: query.trim(), access_token: token, autocomplete: 'true', permanent: 'true', country: 'in', limit: '5', proximity: `${longitude},${latitude}` }).toString();
-        const response = await fetch(url,{ signal: AbortSignal.any([controller.signal,AbortSignal.timeout(15000)]) });
-        if (!response.ok) throw new Error('search');
-        const data = await response.json();
+        const features = await searchMapboxPlaces(query, token, { country: 'in', proximity: [longitude, latitude] }, controller.signal);
         if (id === generation.current) {
-          const features: Result[] = Array.isArray(data.features) ? data.features.filter((feature: Result) => feature && typeof feature.id === 'string' && feature.properties) : [];
           setResults(features); setActive(features.length ? 0 : -1); setSearched(true);
         }
       } catch { if (!controller.signal.aborted && id === generation.current) setError('Place search is unavailable. Please try again in a moment.'); }

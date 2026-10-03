@@ -4,7 +4,7 @@ export function orderedStops(stops: JourneyStop[]) {
   return [...stops].sort((a, b) => a.sequence - b.sequence);
 }
 
-export function hasCoordinates(stop: JourneyStop): stop is JourneyStop & { latitude: number; longitude: number } {
+export function hasCoordinates<T extends Pick<JourneyStop, 'latitude' | 'longitude'>>(stop: T): stop is T & { latitude: number; longitude: number } {
   return typeof stop.latitude === "number" && typeof stop.longitude === "number" && Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude) && Math.abs(stop.latitude) <= 90 && Math.abs(stop.longitude) <= 180;
 }
 

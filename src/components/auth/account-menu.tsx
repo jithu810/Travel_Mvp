@@ -20,8 +20,8 @@ export function AccountMenu({ onUserChange }: { onUserChange?: (authenticated:bo
     const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => { if (active) { setUser(session?.user || null); onUserChange?.(!!session?.user); } });
     return () => { active = false; subscription.unsubscribe(); };
   }, [onUserChange]);
-  return <div className="flex flex-wrap items-center gap-2 text-sm">
-    <Link href={user ? '/profile' : '/login'} aria-label={user ? 'Your profile' : 'Login / Profile'} className="inline-flex min-h-11 max-w-48 items-center rounded-full border border-stone-200 px-4"><span className="truncate">{user ? displayName || 'Profile' : 'Login'}</span></Link>
+  return <div className="flex min-w-0 max-w-[48vw] flex-wrap items-center gap-2 text-sm md:max-w-60">
+    <Link href={user ? '/profile' : '/login'} aria-label={user ? 'Your profile' : 'Login / Profile'} className="inline-flex min-h-11 min-w-0 max-w-full items-center rounded-full border border-stone-200 px-4 md:max-w-48"><span className="truncate">{user ? displayName || 'Profile' : 'Login'}</span></Link>
     {user && <button disabled={busy} className="min-h-11 px-3 underline disabled:opacity-60" onClick={async () => {
       setBusy(true); setError('');
       try { const { error } = await createClient().auth.signOut(); if (error) throw error; setUser(null); onUserChange?.(false); router.replace('/'); router.refresh(); }
