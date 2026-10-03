@@ -1,6 +1,6 @@
 # Travel Mode — browser GPS
 
-Real browser GPS is implemented. Automatic stop arrival is implemented. Turn-by-turn navigation is NOT implemented.
+Real browser GPS is implemented. Automatic stop arrival is implemented. Basic provider road instructions and conservative rerouting are implemented; full native turn-by-turn navigation is not.
 
 Public Journey Story → Use This Journey → overview → Preview Travel Mode → Start Journey. The existing published journey/stop reader, order, map lines and guarded session reducer are reused. Drafts remain unavailable on /travel/[journeyId], including to their owner; Travel Mode remains noindex.
 
@@ -37,7 +37,7 @@ Stops missing coordinates remain in the list and must be completed manually. Mar
 
 ## Map, privacy and persistence
 
-The existing line always represents the creator's planned stop order. Current position is a separate blue DOM marker; it does not change that line. Center on me explicitly recenters the map; Prompt 11 adds opt-in Follow, suspended by manual pan/zoom. Missing map support leaves the stop list, distance and manual controls usable.
+The existing line always represents the creator's planned stop order. Current position is a separate blue DOM marker; it does not change that line. Travel Mode alone uses Mapbox Standard with 3D buildings. Follow uses a 45° pitched camera and reliable moving heading; manual pan/zoom/rotation suspends it. Center on me restores the navigation camera and resumes Follow. Missing map support leaves the stop list, distance and manual controls usable.
 
 Only one current fix (latitude, longitude, accuracy, timestamp, optional valid heading/speed) exists in memory; no location history is collected. Fixes are never written into journey data, Supabase, browser storage, application URLs or application analytics/logging. The GPS-enabled map disables optional performance metrics and uses static attribution links without the dynamic map-feedback URL. Mapbox still supplies the basemap and can see requested tile areas, particularly when Center on me loads nearby tiles; this is not a private/offline basemap.
 
@@ -49,11 +49,11 @@ Browser permission and suitable hardware/service availability are required. Brow
 
 ## Road navigation integration
 
-Prompt 11 adds a separate Directions API adapter, independent blue road-route source, provider maneuvers, driving duration estimate and opt-in Follow. It uses the sole existing GPS fix and next ordered stop, with request cancellation/throttling and offline/error manual fallback. See [travel-navigation.md](travel-navigation.md) for architecture, named limits, configuration, privacy and the phone checklist. Routing necessarily sends coordinates to Mapbox in a POST body; application URLs/APIs/storage/logs remain free of GPS data. No native SDK, traffic claims, voice, aggressive rerouting, persistent GPS track, Travel Memories, new tables, migrations or RLS are included. No production/deployment configuration changes are required. Physical-device road navigation remains NOT FIELD-TESTED.
+Prompt 11 adds a separate Directions API adapter, independent blue road-route source, provider maneuvers, driving duration estimate and opt-in Follow. It uses the sole existing GPS fix and next ordered stop, with request cancellation/throttling and offline/error manual fallback. See [travel-navigation.md](travel-navigation.md) for architecture, named limits, configuration, privacy and the phone checklist. Routing necessarily sends coordinates to Mapbox in a POST body; application URLs/APIs/storage/logs remain free of GPS data. Prompt 12 adds conservative persistent-deviation rerouting without changing stop order: distance minus uncertainty >120 m, at least three distinct readings over eight seconds, and a 60-second automatic reroute cooldown. Stale/poor GPS cannot confirm deviation; existing request guards and manual fallback remain. Only Travel Mode opts into Standard/3D, with separate planned and road sources. No native SDK, traffic claims, voice, persistent GPS track, Travel Memories, new tables, migrations or RLS are included. No production/deployment configuration changes are required. The user reported Prompt 11 phone testing complete; Prompt 12 still needs physical-phone testing after review/deployment.
 
 ## Verification and changed files
 
-GPS math/watch tests: tests/travel-location.spec.ts. Browser mocks: tests/fixtures/geolocation.ts. Five-stop browser lifecycle/privacy/fallback checks: tests/creation/travel-gps.spec.ts. Existing travel-session/manual tests and public/creation/database/auth regression suites remain applicable. Browser geolocation is mocked; real hardware/background tracking has not been field tested.
+GPS math/watch tests: tests/travel-location.spec.ts. Browser mocks: tests/fixtures/geolocation.ts. Five-stop browser lifecycle/privacy/fallback checks: tests/creation/travel-gps.spec.ts. Existing travel-session/manual tests and public/creation/database/auth regression suites remain applicable. Prompt 12 browser geolocation is mocked; its new rerouting/3D behavior still requires physical-phone testing. Continuous background tracking is not implemented.
 
 Prompt 10 added:
 

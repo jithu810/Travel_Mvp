@@ -1,6 +1,7 @@
 import { hasCoordinates } from '../journey/map-data';
 import { distanceMeters, freshLocation, MAX_ARRIVAL_ACCURACY_METERS, type LocationFix } from './location';
 import type { TravelStatus } from './session';
+import { DeviationConfirmation, MIN_REROUTE_INTERVAL_MS } from './rerouting';
 
 export const ROUTE_MOVEMENT_METERS = 150;
 export const ROUTE_REFRESH_INTERVAL_MS = 30_000;
@@ -14,8 +15,8 @@ export type NavigationDestination = { id: string; name: string; latitude: number
 export type NavigationStep = { instruction: string; type: string; distance: number; geometry: RoadGeometry };
 export type RoadRoute = { geometry: RoadGeometry; distance: number; duration: number | null; steps: NavigationStep[] };
 export type NavigationInput = { status: TravelStatus; fix: LocationFix | null; destination: NavigationDestination | undefined; online: boolean };
-export type NavigationState = { destinationKey: string; route: RoadRoute | null; status: 'idle' | 'calculating' | 'active' | 'unavailable'; warning: string; calculatedAt: number };
-export const emptyNavigation = (): NavigationState => ({ destinationKey: '', route: null, status: 'idle', warning: '', calculatedAt: 0 });
+export type NavigationState = { destinationKey: string; route: RoadRoute | null; status: 'idle' | 'calculating' | 'rerouting' | 'active' | 'unavailable'; warning: string; calculatedAt: number; routeStale: boolean; notice: string };
+export const emptyNavigation = (): NavigationState => ({ destinationKey: '', route: null, status: 'idle', warning: '', calculatedAt: 0, routeStale: false, notice: '' });
 export function destinationKey(destination: NavigationDestination | undefined) { return destination && hasCoordinates(destination) ? `${destination.id}:${destination.longitude}:${destination.latitude}` : ''; }
 export function routingReady(input: NavigationInput, now = Date.now()) { return input.status === 'ACTIVE' && !!destinationKey(input.destination) && !!input.fix && freshLocation(input.fix, now) && input.fix.accuracy <= MAX_ARRIVAL_ACCURACY_METERS; }
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {};
@@ -92,6 +93,8 @@ export class NavigationController {
   private failed = false;
   private sequence = 0;
   private pending: AbortController | null = null;
+  private deviation = new DeviationConfirmation();
+  private lastRerouteAt = 0;
   constructor(private load: RouteLoader, private emit: (state: NavigationState) => void, private now = Date.now) {}
   private publish(patch: Partial<NavigationState>) {
     const next = { ...this.state, ...patch };
@@ -99,16 +102,16 @@ export class NavigationController {
     this.state = next; this.emit(this.state);
   }
   private cancel() { this.sequence++; this.pending?.abort(); this.pending = null; }
-  stop() { this.cancel(); this.input = null; this.origin = null; this.attemptedAt = 0; this.failed = false; this.publish(emptyNavigation()); }
+  stop() { this.cancel(); this.input = null; this.origin = null; this.attemptedAt = 0; this.failed = false; this.lastRerouteAt = 0; this.deviation.reset(); this.publish(emptyNavigation()); }
   update(input: NavigationInput, retry = false) {
     this.input = input;
     const key = destinationKey(input.destination), now = this.now();
     if (input.status !== 'ACTIVE' || !key) { this.stop(); return; }
     if (key !== this.state.destinationKey) {
-      this.cancel(); this.origin = null; this.attemptedAt = 0; this.failed = false;
+      this.cancel(); this.origin = null; this.attemptedAt = 0; this.failed = false; this.lastRerouteAt = 0; this.deviation.reset();
       this.publish({ ...emptyNavigation(), destinationKey: key });
     }
-    if (!routingReady(input, now)) { this.cancel(); this.publish({ status: this.failed ? 'unavailable' : this.state.route ? 'active' : 'idle', warning: 'Waiting for a fresh, accurate GPS position. Route is not being updated.' }); return; }
+    if (!routingReady(input, now)) { this.cancel(); this.deviation.reset(); this.publish({ status: this.failed ? 'unavailable' : this.state.route ? 'active' : 'idle', warning: 'Waiting for a fresh, accurate GPS position. Route is not being updated.' }); return; }
     if (!input.online) { this.cancel(); this.failed = true; this.publish({ status: 'unavailable', warning: 'Network unavailable. Any displayed route is the last calculation, not offline navigation.' }); return; }
     if (this.state.warning === 'Waiting for a fresh, accurate GPS position. Route is not being updated.') this.publish({ warning: '' });
     const moved = this.origin ? distanceMeters(this.origin, input.fix!) : Infinity;
@@ -117,15 +120,21 @@ export class NavigationController {
       else return;
     }
     const elapsed = now - this.attemptedAt;
-    if (retry ? elapsed < ROUTE_RETRY_INTERVAL_MS : this.failed || (this.origin && (elapsed < ROUTE_REFRESH_INTERVAL_MS || (moved < ROUTE_MOVEMENT_METERS && now - this.state.calculatedAt < ROUTE_MAX_AGE_MS)))) return;
+    const deviation = this.state.route ? this.deviation.update(input.fix, this.state.route.geometry, now) : { suspect: false, confirmed: false };
+    if (deviation.confirmed) this.publish({ routeStale: true, notice: '' });
+    const reroute = deviation.confirmed && elapsed >= ROUTE_REFRESH_INTERVAL_MS && (!this.lastRerouteAt || now - this.lastRerouteAt >= MIN_REROUTE_INTERVAL_MS);
+    if (retry ? elapsed < ROUTE_RETRY_INTERVAL_MS : this.failed || (deviation.suspect ? !reroute : this.origin && (elapsed < ROUTE_REFRESH_INTERVAL_MS || (moved < ROUTE_MOVEMENT_METERS && now - this.state.calculatedAt < ROUTE_MAX_AGE_MS)))) return;
     this.cancel(); const sequence = this.sequence;
     const controller = new AbortController(); this.pending = controller; this.origin = input.fix!; this.attemptedAt = now; this.failed = false;
-    this.publish({ status: 'calculating', warning: '' });
+    const rerouting = !!this.state.route && (reroute || this.state.routeStale);
+    if (rerouting) this.lastRerouteAt = now;
+    this.publish({ status: rerouting ? 'rerouting' : 'calculating', warning: '', notice: '' });
     const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
     void this.load(input.fix!, input.destination as NavigationDestination & Point, controller.signal).then(route => {
       if (sequence !== this.sequence || !this.input || !routingReady(this.input, this.now()) || key !== destinationKey(this.input.destination)) return;
       if (distanceMeters(input.fix!, this.input.fix!) >= ROUTE_MOVEMENT_METERS) { this.publish({ status: this.state.route ? 'active' : 'idle', warning: 'Position changed while calculating. Waiting to refresh route.' }); return; }
-      this.publish({ route, status: 'active', calculatedAt: this.now(), warning: '' });
+      this.deviation.reset();
+      this.publish({ route, status: 'active', calculatedAt: this.now(), warning: '', routeStale: false, notice: rerouting ? 'Route updated' : '' });
     }).catch(error => {
       if (sequence !== this.sequence) return;
       this.failed = true;

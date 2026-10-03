@@ -1,4 +1,4 @@
-# Travel Mode road navigation (Prompt 11)
+# Travel Mode road navigation (Prompts 11–12)
 
 ## Provider and configuration
 
@@ -9,6 +9,8 @@ Official documentation inspected during implementation:
 - [Directions API: profiles, response, maneuvers, errors, limits and pricing](https://docs.mapbox.com/api/navigation/directions/).
 - [Supported POST requests](https://docs.mapbox.com/api/navigation/http-post/).
 - [GL JS markers and rotation alignment](https://docs.mapbox.com/mapbox-gl-js/api/markers/).
+- [Mapbox Standard configuration](https://docs.mapbox.com/map-styles/reference/standard/).
+- [Supported custom-layer slots](https://docs.mapbox.com/mapbox-gl-js/guides/styles/work-with-layers/).
 - [Public tokens and allowed URLs](https://docs.mapbox.com/help/dive-deeper/access-tokens/).
 
 Reuse `NEXT_PUBLIC_MAPBOX_TOKEN`, a client-safe `pk.` token. No new environment variables, credentials, migrations, RLS, Supabase settings, or production configuration changes are introduced. A real POST using the current local token returned HTTP 200 / `Ok` for Nedumangad to Palode, with LineString geometry, 16,982.785 m, 2,277.722 seconds and nine steps. Credentials are never printed or embedded in source. If a deployed token has URL restrictions, its allowed origins must include the deployment domain (currently `https://www.journeycreator.site`) and intended local development origins. A 401/403 is surfaced as a token/origin configuration error. Account billing/usage and provider availability still apply; verify the account's Directions usage and budget in Mapbox. Requests incur provider usage even when the traveler is anonymous; there is no application-side shared quota service in this phase.
@@ -34,6 +36,23 @@ One request may be pending. Equivalent GPS ticks reuse the existing route. Named
 
 A two-second lifecycle tick checks route age/GPS freshness; it does not imply a request every two seconds. Destination changes and resume start a new lifecycle immediately. Meaningful movement during a pending calculation cancels it and waits for the refresh interval. Abort plus monotonic request IDs, destination identity and current-origin displacement checks prevent late results from updating the current route. Failed requests do not retry in a loop; Retry route is available with the five-second floor. A recovery may also begin when the authoritative next stop changes or the journey resumes.
 
+## Smart rerouting (Prompt 12)
+
+`src/lib/travel/rerouting.ts` centralizes nearest-road-segment distance and persistent deviation confirmation. It compares the current fix with the current road geometry, rather than displacement from the original request or distance to the destination. Wrapped longitude projection handles the dateline; polar geometry is conservatively ignored. This is a distance heuristic, not SDK map matching.
+
+| Constant | Value | Purpose |
+| --- | --- | --- |
+| `OFF_ROUTE_DISTANCE_METERS` | 120 m | Distance minus reported GPS uncertainty must exceed this |
+| `OFF_ROUTE_CONFIRMATION_READINGS` | 3 | Minimum distinct valid off-route readings |
+| `OFF_ROUTE_CONFIRMATION_MS` | 8 seconds | Minimum span across those readings |
+| `MIN_REROUTE_INTERVAL_MS` | 60 seconds | Minimum interval between automatic reroute attempts |
+
+Confirmation requires both the reading count and time span. Readings must meet the existing freshness/accuracy limits (15 seconds / 50 m). Repeated timestamps, out-of-order readings and controller timer ticks do not count; a reading gap above 15 seconds resets evidence. An on-route reading clears evidence. Small fluctuations cannot trigger a deviation reroute. While deviation is suspected, ordinary movement/age refresh cannot bypass confirmation. Automatic reroutes also retain the existing 30-second request floor.
+
+Confirmed deviation marks the last route stale, hides live maneuver guidance, and requests current GPS → the same next incomplete creator stop when cooldown permits. The panel shows accessible “Rerouting…” and “Route updated” states. Success replaces only road geometry/totals/provider instructions and resets deviation evidence. A new deviation must satisfy the policy again. The creator journey, next stop and stop progress remain unchanged.
+
+Pending-request deduplication, aborts, request IDs, destination/current-origin checks and timeout protections remain shared with Prompt 11. Failed reroutes preserve the last same-destination route with a warning and manual completion, and stop automatic retry loops. Explicit Retry retains its five-second floor. Pause, terminal states, invalid/missing stops and unsuitable GPS cannot reroute. No new GPS watch or location persistence is introduced.
+
 ## Map, heading and instructions
 
 Three concepts have separate boundaries:
@@ -42,11 +61,13 @@ Three concepts have separate boundaries:
 2. **Navigation route:** independent `travel-navigation` source and blue/white layers, one in-memory road route from current GPS to the next stop.
 3. **Actual traveled track:** no source, recorder or persistence is implemented. A future module must own its own data and source; never reuse the planned/navigation models for a track.
 
-The existing blue marker is preserved. A small heading indicator appears only when validated browser heading exists; the marker rotates in map alignment. Absent/invalid heading remains a normal blue dot. This is the device-reported current heading, not an invented road/turn arrow or compass guarantee.
+The existing blue marker is preserved and updated from the same current fix. In Travel Mode, its heading indicator requires fresh accuracy ≤50 m, finite heading in [0, 360), and reported speed ≥1.5 m/s. Missing, stationary or unreliable heading remains a blue dot. Rotation is map-aligned; no road bearing or compass accuracy is invented.
 
-Follow is opt-in and smoothly centers on GPS at navigation zoom, uses heading only if present, and respects reduced motion. Manual map pan/zoom suspends Follow; the control returns to Follow. Center on me is an explicit recenter control. Pause/lost GPS clears follow mode. No automatic camera movement occurs until Follow is enabled. Controls remain touch sized and separate from the mobile application navigation.
+Only Travel Mode opts into `mapbox://styles/mapbox/standard`; shared map consumers retain their existing style. Installed GL JS 3.32 supports Standard configuration and slots. Standard supplies 3D buildings with `show3dObjects`/`show3dBuildings` enabled. Optional 3D trees and landmarks are disabled for phone performance. No separate building source, service, dependency or animation loop is added. Planned and road lines use Standard's supported `middle` slot; no classic basemap layer IDs are assumed. Navigation remains usable where building data is absent.
 
-Provider maneuver instructions are implemented. All usable instructions remain accessible in the expandable Mapbox route instructions list. The live next maneuver uses conservative nearest-segment projection against **provider step geometry**, then displays the following provider step's actual instruction/type and approximately the remaining road-segment distance scaled to the provider's step distance. A fix too far away, inaccurate/stale fix, antimeridian-spanning step, or ambiguous nonadjacent intersection hides live guidance. No instruction text or turn arrow is derived/invented from geometry. This is basic browser guidance, not full SDK map matching, lane guidance, voice navigation or guaranteed turn-by-turn progress. More rigorous maneuver progression and deviation rerouting need a dedicated next navigation phase; automatic off-route claims/rerouting are deliberately absent.
+`src/lib/travel/navigation-camera.ts` centralizes zoom 16.2, pitch 45°, 600 ms transitions and reliable-heading bearing. Reduced motion sets transition duration to zero. Follow is opt-in; Center on me restores this camera and resumes Follow. User pan/zoom/rotation suspends it. Camera states distinguish OVERVIEW, FOLLOWING, USER_INTERACTED and RECENTERING; session/GPS states expose PAUSED, COMPLETED, CANCELLED and WAITING_GPS. Pause/lost GPS clears follow mode. Insets leave forward road space and existing controls accessible. Style/map initialization does not repeat on GPS or route updates. Controls remain touch sized and separate from mobile application navigation.
+
+Provider maneuver instructions are implemented. All usable instructions remain accessible in the expandable Mapbox route instructions list. The live next maneuver uses conservative nearest-segment projection against **provider step geometry**, then displays the following provider step's actual instruction/type and approximately the remaining road-segment distance scaled to the provider's step distance. A fix too far away, inaccurate/stale fix, antimeridian-spanning step, or ambiguous nonadjacent intersection hides live guidance. No instruction text or turn arrow is derived/invented from geometry. This is basic browser guidance, not full SDK map matching, lane guidance, voice navigation or guaranteed turn-by-turn progress. Prompt 12 adds conservative deviation rerouting separately from maneuver matching; advanced maneuver progression remains outside this phase.
 
 Road distance and driving duration are **totals at the last calculation**, explicitly labeled. Duration is a Mapbox estimate, not a straight-line calculation or live remaining ETA. No live traffic is requested or claimed. Haversine distance remains separately labeled straight-line geographic distance. Route recalculation refreshes the service totals.
 
@@ -60,29 +81,28 @@ Only the current validated fix, last requested origin and one current route exis
 
 Automated tests use mocked browser geolocation and mocked Directions responses with a real GL JS renderer; they do not use the physical machine's location. Unit/controller tests cover coordinate/response/maneuver parsing, optional duration, lifecycle, movement/age throttling, duplicate requests, cancellation/obsolete responses, bounded retries, network failure and route ownership by destination. Browser tests cover the five ordered stops, mobile 360/390 px and desktop, independent route/markers, instructions, heading, Follow/manual pan, next-stop arrival, pause/resume/end, missing coordinates, offline transitions, manual fallback, storage privacy and overflow/control placement. Existing GPS, manual Travel Mode, public, creation/social/discovery/SEO, auth, isolated database/security, TypeScript, lint and build checks remain required.
 
-**Physical-device road navigation: NOT FIELD-TESTED.** Prompt 10 GPS was reported working by the user on a deployed phone; that does not verify Prompt 11 navigation. Browser location services, heading quality, GPS drift, background suspension, screen lock and battery policies can differ from mocks. This implementation does not guarantee continuous background navigation.
+**Prompt 11 physical-phone verification was reported complete by the user. Prompt 12 rerouting/3D upgrades have not yet been field-tested on a physical phone.** Browser location services, heading quality, GPS drift, background suspension, screen lock and battery policies can differ from mocks. This implementation does not guarantee continuous background navigation.
 
 After deployment, test on HTTPS with an actual phone:
 
 - Open the five-stop public journey anonymously and start with permission enabled.
 - Confirm blue location, separate blue road route and green planned route, road distance, driving estimate and available provider instruction.
-- Enable Follow; verify heading only when the device supplies one, then pan/zoom and recenter/re-enable Follow.
+- Enable Follow; verify 45° pitch, available 3D buildings and reliable moving heading, then pan/zoom/rotate and recenter to resume Follow.
+- Safely deviate: verify rerouting requires persistent reliable deviation, retains the same next stop and creator order, and replaces only the road route. Check cooldown and failed-reroute Retry/manual fallback.
 - Move along roads and confirm route refresh is restrained; arrive at each next ordered stop and verify automatic route transition.
 - Pause/resume with a fresh reading; end and confirm location/navigation stop.
 - Deny permission or use a missing-coordinate stop and complete manually.
 - Lose network: confirm the old same-destination route is visibly labeled, new-destination routing is unavailable, manual progress works, and Retry route works after recovery.
 - Check controls above the mobile bottom navigation and map visibility in portrait/landscape.
 
-Future SDK/native/PWA work may improve matching, off-route detection, dynamic remaining ETA, voice and background behavior. Future actual-track storage and Travel Memories require a separate explicit privacy/storage design and are outside this implementation.
+Future SDK/native/PWA work may improve matching, dynamic remaining ETA, voice and background behavior. Future actual-track storage and Travel Memories require a separate explicit privacy/storage design and are outside this implementation.
 
-## Implementation verification record
+## Prompt 12 verification
 
-- Public suite: 62 passed, four configured-auth cases intentionally skipped in the unconfigured build.
-- Complete isolated creation/social/discovery/SEO/Travel/GPS/navigation suite: 52 passed.
-- Configured Auth plus final navigation units and GPS/browser integrations: 32 passed, including the public suite's skipped login/signup/persistence/logout scenarios.
-- TypeScript, lint, configured production build, isolated database/security tests and whitespace checks passed.
-- Live local app with real Mapbox routing and basemap, simulated GPS at 360, 390 and 1440 px: HTTP 200 routing, separate road/planned lines, ~38-minute service estimate for Nedumangad to Palode, zero page/console errors, no horizontal overflow, controls below map and above mobile bottom navigation. Screenshots inspected. This is browser simulation, not a physical-device field test.
+Controller/unit tests cover thresholds, uncertainty, noise, persistence, duplicate timestamps, cooldown, failures, bounded retry, paused/terminal/missing-stop guards, superseded responses and camera configuration. Browser tests use mocked Directions/GPS with real GL JS and a Standard-compatible imported basemap/slot fixture. They verify the five-stop Thenkasi rerouting scenario, source separation, marker/camera, manual gestures, recenter, failure recovery, privacy and mobile layout. Existing discovery/social/creation/GPS/navigation regression suites remain applicable.
 
-Added files: `src/lib/travel/navigation.ts`, `src/components/travel/use-travel-navigation.ts`, `src/components/travel/navigation-panel.tsx`, `tests/travel-navigation.spec.ts`, `tests/creation/travel-navigation.spec.ts`, `tests/fixtures/directions.ts`, and this document.
+Live local visual QA used the real published Nedumangad → Palode → Thenmala → Thenkasi → Sundarapandiapuram journey at 360, 390 and 1440 px. Real Standard showed 3D buildings, pitch 45°, zoom 16.2, reliable bearing, blue location and separate planned/road lines. There were no console/page errors, horizontal overflow or overlapping controls. One real Directions response was reused for viewport QA to conserve usage; GPS was simulated. An additional 844×390 landscape check with real Standard and mocked Directions verified Follow, 45° pitch, no overflow, controls below the map and zero browser errors. This is browser verification, not a Prompt 12 physical-phone field test.
 
-Updated files: `src/components/travel/travel-mode.tsx`, `src/components/travel/gps-status.tsx`, `src/components/map/journey-map.tsx`, `src/app/globals.css`, `tests/creation/travel-gps.spec.ts`, `tests/fixtures/geolocation.ts`, and `docs/travel-mode.md`. No dependency, environment, schema, RLS, authentication or production configuration files were changed.
+No persistent traveled GPS track, background GPS, Travel Memories, native app, voice navigation, offline navigation, traffic prediction or lane guidance is implemented. No dependency, environment, schema, RLS, authentication or production configuration changes are required.
+
+Final checks: public/unit suite 74 passed (four configured-auth skips); full isolated creation/social/discovery/GPS/navigation suite 54 passed; configured authentication suite eight passed, covering the skipped cases. TypeScript, lint, configured production build, isolated database/security checks and whitespace checks passed. No hosted migration or data mutation was performed.

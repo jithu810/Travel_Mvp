@@ -1,3 +1,4 @@
+import { mockNavigationMap } from '../fixtures/navigation-map';
 import { test, expect } from '@playwright/test';
 import { mockGeolocation, emitLocation, gpsCounts, type GpsMock } from '../fixtures/geolocation';
 import { mockDirections } from '../fixtures/directions';
@@ -17,6 +18,7 @@ test('GPS five-stop journey lifecycle, ordered arrivals, fresh refresh and map p
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   page.on('request', request => outbound.push(request.url() + (request.postData() || '')));
   await mockGeolocation(page);
+  await mockNavigationMap(page);
   await mockDirections(page);
   // Keep GPS tests deterministic while exercising the real Mapbox renderer/markers/line.
   // The separately performed live visual QA uses the configured real basemap.
@@ -128,6 +130,7 @@ test('GPS five-stop journey lifecycle, ordered arrivals, fresh refresh and map p
 
 test('expired current location disappears even without a new reading and map failure does not block progress', async ({ page }) => {
   await mockGeolocation(page, 'granted');
+  await mockNavigationMap(page);
   await mockDirections(page);
   await page.clock.install();
   await page.route('**/styles/v1/**', route => route.abort());
@@ -147,6 +150,7 @@ test('expired current location disappears even without a new reading and map fai
 
 test('denied permission is not repeatedly requested and manual fallback remains complete', async ({ page }) => {
   await mockGeolocation(page);
+  await mockNavigationMap(page);
   await page.goto('/travel/demo-goa-couple');
   await page.getByRole('button', { name: 'Start Journey', exact: true }).click();
   await expect.poll(async () => (await gpsCounts(page)).active).toBe(1);
@@ -167,6 +171,7 @@ test('denied permission is not repeatedly requested and manual fallback remains 
 test('GPS errors, insecure context and missing-coordinate stops degrade safely', async ({ page, request }) => {
   const id = crypto.randomUUID();
   await mockGeolocation(page, 'granted');
+  await mockNavigationMap(page);
   await mockDirections(page);
   try {
     expect((await request.post('http://127.0.0.1:54329/rest/v1/rpc/save_journey', { headers, data: { payload: {

@@ -1,3 +1,4 @@
+import { mockNavigationMap } from '../fixtures/navigation-map';
 import { test, expect } from '@playwright/test';
 
 const owner = '10000000-0000-0000-0000-000000000001';
@@ -9,6 +10,7 @@ const headers = { Authorization: `Bearer ${token}` };
 
 test('five-stop simulation preserves state, map statuses, details and confirmation on narrow/mobile/desktop', async ({ page, request }, info) => {
   test.setTimeout(120000);
+  await mockNavigationMap(page);
   const id = crypto.randomUUID(), stopIds = names.map(() => crypto.randomUUID());
   const key = `journeycreator:travel:v1:${id}`;
   const errors: string[] = [], requests: string[] = [], writes: string[] = [];

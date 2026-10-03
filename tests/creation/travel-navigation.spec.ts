@@ -1,3 +1,4 @@
+import { mockNavigationMap } from '../fixtures/navigation-map';
 import { test, expect } from '@playwright/test';
 import { mockGeolocation, emitLocation, gpsCounts, type GpsMock } from '../fixtures/geolocation';
 import { mockDirections, directionsResponse } from '../fixtures/directions';
@@ -16,6 +17,7 @@ test('five-stop road navigation, conservative requests, follow, heading, arrival
   page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   page.on('request', r => { if (r.method() !== 'GET' && new URL(r.url()).hostname === 'localhost') appWrites.push(r.url()); });
   await mockGeolocation(page);
+  await mockNavigationMap(page);
   const requests = await mockDirections(page);
   await page.route('**/styles/v1/mapbox/streets-v12*', route => route.fulfill({ json: basemap }));
   await page.route('https://events.mapbox.com/**', route => route.fulfill({ status: 204 }));
@@ -34,6 +36,7 @@ test('five-stop road navigation, conservative requests, follow, heading, arrival
     await expect(page.getByTestId('road-distance')).toHaveText('2.4 km'); await expect(page.getByTestId('road-duration')).toHaveText('~10 min');
     await expect(page.getByTestId('next-maneuver')).toContainText('Turn left onto the destination road');
     await expect(page.getByTestId('journey-map')).toHaveAttribute('data-state', 'ready');
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-map-style', 'standard');
     await expect(page.getByTestId('journey-map')).toHaveAttribute('data-navigation', 'road-route');
     await expect(page.getByTestId('route-marker')).toHaveCount(5); await expect(page.getByTestId('current-location-marker')).toHaveCount(1);
     expect(requests).toHaveLength(1); expect(new URLSearchParams(requests[0]).get('coordinates')).toContain(';77.00279,8.603315');
@@ -45,6 +48,8 @@ test('five-stop road navigation, conservative requests, follow, heading, arrival
     await expect(page.getByRole('button', { name: 'Stop following' })).toHaveAttribute('aria-pressed', 'true');
     await page.evaluate(() => (window as unknown as { gpsMock: GpsMock }).gpsMock.emit(8.6134, 77.012719183, 10, Date.now(), 90));
     await expect(page.getByTestId('current-location-marker')).toHaveClass(/has-heading/);
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-pitch', '45');
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-bearing', '90');
     await expect.poll(() => page.getByTestId('route-marker').first().getAttribute('style')).not.toBe(marker);
     const box = (await page.getByTestId('journey-map').boundingBox())!;
     await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.65); await page.mouse.down(); await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.6, { steps: 10 }); await page.mouse.up();
@@ -53,6 +58,8 @@ test('five-stop road navigation, conservative requests, follow, heading, arrival
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Follow', exact: true })).toHaveAttribute('aria-pressed', 'false');
     await page.getByRole('button', { name: 'Center on me' }).click();
+    await expect(page.getByRole('button', { name: 'Stop following' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-camera', 'FOLLOWING');
     await emitLocation(page, ...points[0] as [number, number]);
     await expect(page.getByTestId('travel-progress')).toHaveText('1 / 5 stops · 20%');
     await expect(page.getByTestId('road-navigation')).toContainText('Road route to Palode');
@@ -89,7 +96,8 @@ test('five-stop road navigation, conservative requests, follow, heading, arrival
 
 test('missing coordinates, network failures, retries and offline destination changes keep manual progress', async ({ page, request }) => {
   const id = crypto.randomUUID(); let calls = 0;
-  await mockGeolocation(page); await page.route('**/styles/v1/mapbox/streets-v12*', route => route.fulfill({ json: basemap }));
+  await mockGeolocation(page);
+  await mockNavigationMap(page); await page.route('**/styles/v1/mapbox/streets-v12*', route => route.fulfill({ json: basemap }));
   await page.route('https://events.mapbox.com/**', route => route.fulfill({ status: 204 }));
   await page.route('https://api.mapbox.com/directions/v5/**', async route => { calls++; if (calls === 1) await route.abort(); else { const pairs = new URLSearchParams(route.request().postData()!).get('coordinates')!.split(';').map(p => p.split(',').map(Number)); await route.fulfill({ json: directionsResponse(pairs[0], pairs[1]) }); } });
   try {
@@ -111,4 +119,69 @@ test('missing coordinates, network failures, retries and offline destination cha
     await expect(page.getByTestId('road-distance')).toHaveCount(0); await expect(page.getByTestId('road-navigation')).toContainText('Thenmala'); expect(calls).toBe(2);
     await page.getByRole('button', { name: 'Mark Stop Complete' }).click(); await expect(page.getByTestId('travel-mode')).toHaveAttribute('data-state', 'COMPLETED');
   } finally { await request.delete(`http://127.0.0.1:54329/rest/v1/journeys?id=eq.${id}`, { headers }); }
+});
+
+
+test('persistent off-route rerouting preserves Thenkasi destination, route separation and manual/error recovery', async ({ page, request }, info) => {
+  const id = crypto.randomUUID(); let calls = 0; let release: (() => void) | undefined;
+  const bodies: string[] = [], errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await mockGeolocation(page); await mockNavigationMap(page);
+  await page.route('https://api.mapbox.com/directions/v5/**', async route => {
+    calls++; bodies.push(route.request().postData()!);
+    if (calls === 3) { await route.abort(); return; }
+    if (calls === 2) await new Promise<void>(resolve => { release = resolve; });
+    const pairs = new URLSearchParams(route.request().postData()!).get('coordinates')!.split(';').map(p => p.split(',').map(Number));
+    const response = directionsResponse(pairs[0], pairs[1]);
+    if (calls > 1) { response.routes[0].distance = 4500; response.routes[0].duration = 900; }
+    await route.fulfill({ json: response });
+  });
+  try {
+    expect((await request.post('http://127.0.0.1:54329/rest/v1/rpc/save_journey', { headers, data: { payload: {
+      id, title: 'Smart rerouting five-stop journey', destination_slug: 'thenkasi', traveler_type: 'couple', duration_days: 1, status: 'published', cover_image_path: null,
+      stops: names.map((name, i) => ({ id: crypto.randomUUID(), name, sequence: i + 1, latitude: points[i][0], longitude: points[i][1], description: 'Existing stop', day_number: 1, photo_path: null })),
+    } } })).ok()).toBe(true);
+    await page.clock.install();
+    await page.goto(`/travel/${id}`); await page.getByRole('button', { name: 'Start Journey', exact: true }).click();
+    await expect.poll(async () => (await gpsCounts(page)).active).toBe(1);
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Mark Stop Complete' }).click();
+    await emitLocation(page, 8.967814, 77.080);
+    await expect(page.getByTestId('road-navigation')).toHaveAttribute('data-status', 'active');
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-state', 'ready');
+    const creatorOrder = await page.getByTestId('travel-stop').allTextContents();
+    await page.clock.fastForward(30000);
+    await emitLocation(page, 8.9683, 77.080); expect(calls).toBe(1);
+    await page.clock.fastForward(1);
+    for (let i = 0; i < 3; i++) {
+      if (i) await page.clock.fastForward(4000);
+      await emitLocation(page, 8.971, 77.080);
+      await page.clock.runFor(10);
+      if (i < 2) { await expect(page.getByTestId('road-navigation')).toHaveAttribute('data-status', 'active'); expect(calls).toBe(1); }
+    }
+    await expect(page.getByTestId('road-navigation')).toHaveAttribute('data-status', 'rerouting');
+    await expect(page.getByTestId('road-navigation')).toContainText('Rerouting');
+    await expect(page.getByTestId('road-distance')).toHaveText('2.4 km');
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-navigation', 'road-route');
+    expect(calls).toBe(2); expect(new URLSearchParams(bodies[1]).get('coordinates')).toContain(';77.308655,8.955386');
+    release!(); await expect(page.getByTestId('road-navigation')).toContainText('Route updated');
+    await expect(page.getByTestId('road-distance')).toHaveText('4.5 km'); await expect(page.getByTestId('road-duration')).toHaveText('~15 min');
+    await expect(page.getByTestId('current-location-marker')).toHaveCount(1);
+    expect(await page.getByTestId('travel-stop').allTextContents()).toEqual(creatorOrder);
+    await expect(page.getByTestId('travel-progress')).toHaveText('3 / 5 stops · 60%');
+    for (let i = 0; i < 5; i++) { await page.clock.fastForward(1000); await emitLocation(page, 8.971, 77.080); } expect(calls).toBe(2);
+    await page.screenshot({ path: info.outputPath('smart-rerouting.png'), fullPage: true });
+    await page.clock.fastForward(60000);
+    for (let i = 0; i < 3; i++) { if (i) await page.clock.fastForward(4000); await emitLocation(page, 8.975, 77.080); await page.clock.runFor(10); }
+    await expect(page.getByTestId('road-navigation')).toHaveAttribute('data-status', 'unavailable');
+    await expect(page.getByTestId('road-distance')).toHaveText('4.5 km');
+    await expect(page.getByRole('button', { name: 'Mark Stop Complete' })).toBeVisible();
+    for (let i = 0; i < 10; i++) { await page.clock.fastForward(4000); await emitLocation(page, 8.975, 77.080); } expect(calls).toBe(3);
+    await page.getByRole('button', { name: 'Retry route' }).click();
+    await expect(page.getByTestId('road-navigation')).toHaveAttribute('data-status', 'active'); expect(calls).toBe(4);
+    await page.getByRole('button', { name: 'Pause Journey' }).click();
+    await expect(page.getByTestId('journey-map')).toHaveAttribute('data-camera', 'PAUSED');
+    await page.clock.fastForward(70000); await emitLocation(page, 8.980, 77.080); expect(calls).toBe(4);
+    expect(await page.getByTestId('travel-stop').allTextContents()).toEqual(creatorOrder);
+    expect(errors).toEqual([]);
+  } finally { release?.(); await request.delete(`http://127.0.0.1:54329/rest/v1/journeys?id=eq.${id}`, { headers }); }
 });

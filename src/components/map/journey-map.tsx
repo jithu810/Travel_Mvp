@@ -6,8 +6,10 @@ import { buildMapData } from "@/lib/journey/map-data";
 import type { JourneyStop } from "@/lib/journey/types";
 import type { LocationFix } from '@/lib/travel/location';
 import type { RoadGeometry } from '@/lib/travel/navigation';
+import { NAVIGATION_MAP_STYLE, navigationCamera, reliableHeading, type NavigationCameraState } from '@/lib/travel/navigation-camera';
+import type { TravelStatus } from '@/lib/travel/session';
 
-type Props = { stops: JourneyStop[]; selectedId: string | null; onSelect: (id: string) => void; story?: boolean; progress?: { completedIds: string[]; currentId: string | null }; locationEnabled?: boolean; currentLocation?: LocationFix | null; navigationRoute?: RoadGeometry };
+type Props = { stops: JourneyStop[]; selectedId: string | null; onSelect: (id: string) => void; story?: boolean; progress?: { completedIds: string[]; currentId: string | null }; locationEnabled?: boolean; currentLocation?: LocationFix | null; navigationRoute?: RoadGeometry; navigationMode?: boolean; travelStatus?: TravelStatus };
 
 function stopState(id: string, progress: Props['progress']) {
   return !progress ? null : progress.completedIds.includes(id) ? 'completed' : progress.currentId === id ? 'current' : 'upcoming';
@@ -34,7 +36,7 @@ function RoutePreview({ stops, selectedId, onSelect, story, progress }: Props) {
   </div>;
 }
 
-export function JourneyMap({ stops, selectedId, onSelect, story = false, progress, locationEnabled = false, currentLocation, navigationRoute }: Props) {
+export function JourneyMap({ stops, selectedId, onSelect, story = false, progress, locationEnabled = false, currentLocation, navigationRoute, navigationMode = false, travelStatus }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("mapbox-gl").Map | null>(null);
   const locationMarker = useRef<import('mapbox-gl').Marker | null>(null);
@@ -43,6 +45,7 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [following, setFollowing] = useState(false);
   const followingRef = useRef(false);
+  const [cameraState, setCameraState] = useState<NavigationCameraState>('OVERVIEW');
   const token = getMapboxToken();
   const data = useMemo(() => buildMapData(stops), [stops]);
   useEffect(() => { selectRef.current = onSelect; }, [onSelect]);
@@ -71,10 +74,15 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
         const mapbox = (await import("mapbox-gl")).default;
         if (disposed || !container.current) return;
         if (!mapbox.supported()) throw new Error("WebGL unavailable");
-        map = new mapbox.Map({ container: container.current, accessToken: token, style: "mapbox://styles/mapbox/streets-v12", center: [data.markers[0].longitude, data.markers[0].latitude], zoom: 11,
+        map = new mapbox.Map({ container: container.current, accessToken: token, style: navigationMode ? NAVIGATION_MAP_STYLE : "mapbox://styles/mapbox/streets-v12", center: [data.markers[0].longitude, data.markers[0].latitude], zoom: 11,
+          ...(navigationMode ? { projection: 'mercator', config: { basemap: { show3dObjects: true, show3dBuildings: true, show3dTrees: false, show3dLandmarks: false, lightPreset: 'day' } } } : {}),
           ...(locationEnabled ? { attributionControl: false, performanceMetricsCollection: false } : {}) });
         mapRef.current = map;
-        if (locationEnabled) map.on('movestart', event => { if (event.originalEvent) { followingRef.current = false; setFollowing(false); } });
+        if (locationEnabled) map.on('movestart', event => { if (event.originalEvent) { followingRef.current = false; setFollowing(false); setCameraState('USER_INTERACTED'); } });
+        if (navigationMode) map.on('moveend', () => {
+          if (container.current && map) { container.current.dataset.pitch = String(map.getPitch()); container.current.dataset.zoom = String(map.getZoom()); container.current.dataset.bearing = String(map.getBearing()); }
+          if (followingRef.current) setCameraState('FOLLOWING');
+        });
         map.addControl(new mapbox.NavigationControl(story ? { showCompass: false } : undefined), "top-right");
         const bounds = new mapbox.LngLatBounds();
         for (const stop of data.markers) {
@@ -99,8 +107,8 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
           if (disposed || failed || !map) return;
           clearTimeout(timeout);
           map.addSource("journey-sequence", { type: "geojson", data: data.line });
-          if (story) map.addLayer({ id: "journey-sequence-outline", type: "line", source: "journey-sequence", paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 }, layout: { "line-join": "round", "line-cap": "round" } });
-          map.addLayer({ id: "journey-sequence", type: "line", source: "journey-sequence", paint: { "line-color": "#245b46", "line-width": locationEnabled ? 3 : 4, "line-opacity": locationEnabled ? 0.55 : 0.85, ...(locationEnabled ? { 'line-dasharray': [2, 2] } : {}) }, layout: { "line-join": "round", "line-cap": "round" } });
+          if (story) map.addLayer({ id: "journey-sequence-outline", type: "line", source: "journey-sequence", ...(navigationMode ? { slot: 'middle' } : {}), paint: { "line-color": "#ffffff", "line-width": 8, "line-opacity": 0.9 }, layout: { "line-join": "round", "line-cap": "round" } });
+          map.addLayer({ id: "journey-sequence", type: "line", source: "journey-sequence", ...(navigationMode ? { slot: 'middle' } : {}), paint: { "line-color": "#245b46", "line-width": locationEnabled ? 3 : 4, "line-opacity": locationEnabled ? 0.55 : 0.85, ...(locationEnabled ? { 'line-dasharray': [2, 2] } : {}) }, layout: { "line-join": "round", "line-cap": "round" } });
           setState("ready");
         });
         map.on("error", fail);
@@ -110,7 +118,7 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
     }
     void initialize();
     return () => { disposed = true; clearTimeout(timeout); observer?.disconnect(); markersRef.current.forEach(({ marker }) => marker.remove()); markersRef.current = []; locationMarker.current?.remove(); locationMarker.current = null; if (!failed) map?.remove(); mapRef.current = null; };
-  }, [token, data, story, locationEnabled]);
+  }, [token, data, story, locationEnabled, navigationMode]);
 
   useEffect(() => {
     let disposed = false;
@@ -128,14 +136,15 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
       }
       locationMarker.current.setLngLat([currentLocation.longitude, currentLocation.latitude]);
       const element = locationMarker.current.getElement();
-      element.classList.toggle('has-heading', currentLocation.heading !== null);
-      element.setAttribute('aria-label', currentLocation.heading !== null ? 'Your current location and reported heading' : 'Your current location');
-      locationMarker.current.setRotationAlignment('map').setRotation(currentLocation.heading ?? 0);
-      if (followingRef.current) map?.easeTo({ center: [currentLocation.longitude, currentLocation.latitude], ...(currentLocation.heading !== null ? { bearing: currentLocation.heading } : {}), zoom: 14, padding: { top: 100, bottom: 30, left: 30, right: 30 }, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600 });
+      const heading = navigationMode ? reliableHeading(currentLocation) : currentLocation.heading;
+      element.classList.toggle('has-heading', heading !== null);
+      element.setAttribute('aria-label', heading !== null ? 'Your current location and reported heading' : 'Your current location');
+      locationMarker.current.setRotationAlignment('map').setRotation(heading ?? 0);
+      if (followingRef.current) map?.easeTo(navigationMode ? navigationCamera(currentLocation, window.matchMedia('(prefers-reduced-motion: reduce)').matches) : { center: [currentLocation.longitude, currentLocation.latitude], ...(heading !== null ? { bearing: heading } : {}), zoom: 14, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600 });
     }
     void update();
     return () => { disposed = true; };
-  }, [currentLocation, state]);
+  }, [currentLocation, state, navigationMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -145,10 +154,16 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
     if (source) source.setData(line);
     else if (navigationRoute) {
       map.addSource('travel-navigation', { type: 'geojson', data: line });
-      map.addLayer({ id: 'travel-navigation-outline', type: 'line', source: 'travel-navigation', paint: { 'line-color': '#ffffff', 'line-width': 9 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
-      map.addLayer({ id: 'travel-navigation', type: 'line', source: 'travel-navigation', paint: { 'line-color': '#1d4ed8', 'line-width': 6 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+      map.addLayer({ id: 'travel-navigation-outline', type: 'line', source: 'travel-navigation', ...(navigationMode ? { slot: 'middle' } : {}), paint: { 'line-color': '#ffffff', 'line-width': 9 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
+      map.addLayer({ id: 'travel-navigation', type: 'line', source: 'travel-navigation', ...(navigationMode ? { slot: 'middle' } : {}), paint: { 'line-color': '#1d4ed8', 'line-width': 6 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     }
-  }, [navigationRoute, state]);
+  }, [navigationRoute, state, navigationMode]);
+
+  function recenter() {
+    if (!currentLocation) return;
+    if (navigationMode) { followingRef.current = true; setFollowing(true); setCameraState('RECENTERING'); }
+    mapRef.current?.easeTo(navigationMode ? navigationCamera(currentLocation, window.matchMedia('(prefers-reduced-motion: reduce)').matches) : { center: [currentLocation.longitude, currentLocation.latitude], zoom: 13, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400 });
+  }
 
   useEffect(() => {
     markersRef.current.forEach(({ id, marker, button }) => {
@@ -171,8 +186,8 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
   const selected = data.markers.find((stop) => stop.id === selectedId);
   const fallback = !token || state === "error" || !data.markers.length;
   return <section aria-label="Journey route map" className={`overflow-hidden rounded-3xl border border-stone-200 bg-white ${story ? '[&_.mapboxgl-popup]:z-[3]' : ''}`}>
-    <div className={fallback ? "hidden" : "relative"}><div ref={container} data-testid="journey-map" data-state={state} data-navigation={navigationRoute ? 'road-route' : 'none'} className={`w-full ${story ? "h-[360px] sm:h-[500px]" : "h-80 sm:h-96"}`}/>{state === "loading" && !fallback && <p role="status" className="absolute bottom-4 left-4 rounded-xl bg-white p-3 text-sm shadow">Loading journey map…</p>}
-      {locationEnabled && state === 'ready' && <><button type="button" disabled={!currentLocation} onClick={() => { if (currentLocation) mapRef.current?.easeTo({ center: [currentLocation.longitude, currentLocation.latitude], zoom: 13, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400 }); }} className="absolute top-3 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">Center on me</button><button type="button" disabled={!currentLocation} aria-pressed={following && !!currentLocation} onClick={() => { followingRef.current = !followingRef.current; setFollowing(followingRef.current); if (followingRef.current && currentLocation) mapRef.current?.easeTo({ center: [currentLocation.longitude, currentLocation.latitude], zoom: 14, ...(currentLocation.heading !== null ? { bearing: currentLocation.heading } : {}), duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400 }); }} className="absolute top-16 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">{following && currentLocation ? 'Stop following' : 'Follow'}</button><p className="absolute right-2 bottom-1 rounded bg-white/90 px-2 text-[10px] text-stone-700"><a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">© Mapbox</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></p></>}
+    <div className={fallback ? "hidden" : "relative"}><div ref={container} data-testid="journey-map" data-state={state} data-map-style={navigationMode ? 'standard' : 'streets-v12'} data-camera={navigationMode && travelStatus !== 'ACTIVE' ? travelStatus : !currentLocation ? 'WAITING_GPS' : cameraState} data-navigation={navigationRoute ? 'road-route' : 'none'} className={`w-full ${story ? "h-[360px] sm:h-[500px]" : "h-80 sm:h-96"}`}/>{state === "loading" && !fallback && <p role="status" className="absolute bottom-4 left-4 rounded-xl bg-white p-3 text-sm shadow">Loading journey map…</p>}
+      {locationEnabled && state === 'ready' && <><button type="button" disabled={!currentLocation} onClick={recenter} className="absolute top-3 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">Center on me</button><button type="button" disabled={!currentLocation} aria-pressed={following && !!currentLocation} onClick={() => { followingRef.current = !followingRef.current; setFollowing(followingRef.current); if (followingRef.current) recenter(); else setCameraState('USER_INTERACTED'); }} className="absolute top-16 left-3 z-[4] min-h-11 rounded-full border border-stone-200 bg-white px-4 text-sm font-semibold text-brand shadow disabled:opacity-50">{following && currentLocation ? 'Stop following' : 'Follow'}</button><p className="absolute right-2 bottom-1 rounded bg-white/90 px-2 text-[10px] text-stone-700"><a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noreferrer">© Mapbox</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></p></>}
     </div>
     {fallback && <RoutePreview stops={stops} selectedId={selectedId} onSelect={onSelect} story={story} progress={progress}/>}
     {story && <p className="border-t border-stone-100 px-5 py-3 text-xs font-semibold text-brand">{stops.length} stops · {data.markers[0]?.name || "Journey overview"}{data.markers.length > 1 ? ` → ${data.markers.at(-1)?.name}` : ""}</p>}

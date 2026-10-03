@@ -30,14 +30,14 @@ test('routing eligibility excludes all inactive states, missing, invalid and ina
 test('controller deduplicates GPS ticks, throttles movement/staleness and refreshes stop/resume', async () => {
   let now = Date.now(), calls = 0; let state: NavigationState | undefined;
   const service = new NavigationController(async () => { calls++; return road; }, value => { state = value; }, () => now);
-  const fresh = (latitude = 8.613271839) => input({ fix: fix({ latitude, timestamp: now }) });
+  const fresh = (longitude = 77.012719183) => input({ fix: fix({ longitude, timestamp: now }) });
   service.update(fresh()); service.update(fresh()); await settle(); expect(calls).toBe(1); expect(state!.status).toBe('active');
-  now += 1000; service.update(fresh(8.6133)); await settle(); expect(calls).toBe(1);
+  now += 1000; service.update(fresh(77.0127)); await settle(); expect(calls).toBe(1);
   service.update(input({ fix: fix({ accuracy: 100, timestamp: now }) })); expect(state!.warning).toContain('accurate GPS');
-  service.update(fresh(8.6133)); expect(state!.warning).toBe(''); expect(calls).toBe(1);
-  service.update(fresh(8.62)); await settle(); expect(calls).toBe(1);
-  now += ROUTE_REFRESH_INTERVAL_MS; service.update(fresh(8.62)); await settle(); expect(calls).toBe(2);
-  now += ROUTE_MAX_AGE_MS; service.update(fresh(8.62)); await settle(); expect(calls).toBe(3);
+  service.update(fresh(77.0127)); expect(state!.warning).toBe(''); expect(calls).toBe(1);
+  service.update(fresh(77.007)); await settle(); expect(calls).toBe(1);
+  now += ROUTE_REFRESH_INTERVAL_MS; service.update(fresh(77.007)); await settle(); expect(calls).toBe(2);
+  now += ROUTE_MAX_AGE_MS; service.update(fresh(77.007)); await settle(); expect(calls).toBe(3);
   service.update(input({ fix: fix({ timestamp: now }), destination: { id: 'b', name: 'Palode', latitude: 8.723348, longitude: 77.02781 } })); await settle(); expect(calls).toBe(4);
   for (const status of ['PAUSED', 'COMPLETED', 'CANCELLED'] as const) { service.update(input({ status })); expect(state!.route).toBeNull(); }
   service.update(fresh()); await settle(); expect(calls).toBe(5); service.stop();
@@ -52,7 +52,7 @@ test('obsolete destination and moving-origin requests cannot overwrite the lates
   pending[1].resolve({ ...road, distance: 5000 }); await settle(); pending[0].resolve(road); await settle(); expect(state!.route!.distance).toBe(5000);
   service.stop(); service.update(input()); service.update(input({ fix: fix({ latitude: 8.63 }) })); expect(pending[2].signal.aborted).toBe(true);
   pending[2].resolve(road); await settle(); expect(state!.route).toBeNull();
-  now += ROUTE_REFRESH_INTERVAL_MS; service.update(input({ fix: fix({ latitude: 8.63, timestamp: now }) })); expect(pending.length).toBe(4);
+  now += ROUTE_REFRESH_INTERVAL_MS; service.update(input({ fix: fix({ longitude: 77.007, timestamp: now }) })); expect(pending.length).toBe(4);
   service.stop(); pending[3].resolve(road); await settle(); expect(state!.route).toBeNull();
 });
 
@@ -60,7 +60,7 @@ test('network failures preserve only the same destination route; retry is bounde
   let now = Date.now() + 100, calls = 0, fail = false; let state: NavigationState | undefined;
   const service = new NavigationController(async () => { calls++; if (fail) throw new Error('network'); return road; }, value => { state = value; }, () => now);
   service.update(input()); await settle(); fail = true; now += ROUTE_REFRESH_INTERVAL_MS;
-  service.update(input({ fix: fix({ latitude: 8.63, timestamp: now }) })); await settle(); expect(state!.status).toBe('unavailable'); expect(state!.route).toBe(road);
+  service.update(input({ fix: fix({ longitude: 77.007, timestamp: now }) })); await settle(); expect(state!.status).toBe('unavailable'); expect(state!.route).toBe(road);
   service.update(input({ fix: null })); service.update(input({ fix: fix({ timestamp: now }) })); expect(state!.status).toBe('unavailable');
   service.update(input({ fix: fix({ timestamp: now }) }), true); expect(calls).toBe(2);
   now += 5000; fail = false; service.update(input({ fix: fix({ timestamp: now }) }), true); await settle(); expect(calls).toBe(3);
