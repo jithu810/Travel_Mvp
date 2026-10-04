@@ -11,7 +11,7 @@ export type MapboxFeature = {
 
 type SearchOptions = { country?: string; proximity?: [number, number]; types?: string; language?: string; limit?: number };
 
-// Shared Geocoding v6 transport. Create keeps its India/proximity options;
+// Shared Geocoding v6 transport. Create uses destination proximity worldwide;
 // destination discovery supplies geographic types with no country restriction.
 export async function searchMapboxPlaces(query: string, token: string, options: SearchOptions, signal: AbortSignal): Promise<MapboxFeature[]> {
   const url = new URL('https://api.mapbox.com/search/geocode/v6/forward');

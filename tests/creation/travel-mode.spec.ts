@@ -79,7 +79,7 @@ test('five-stop simulation preserves state, map statuses, details and confirmati
     await expect(page.getByTestId('journey-map')).toHaveAttribute('data-state', 'ready', { timeout: 30000 });
     const toolbar = (await page.getByRole('region', { name: 'Travel controls' }).boundingBox())!;
     const map = (await page.getByTestId('journey-map').boundingBox())!;
-    expect(toolbar.y).toBeGreaterThanOrEqual(map.y + map.height);
+    expect(toolbar.y).toBeGreaterThanOrEqual(map.y); expect(toolbar.y + toolbar.height).toBeLessThanOrEqual(map.y + map.height);
     if (info.project.name === 'mobile') {
       const rect = (await complete.boundingBox())!, nav = (await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox())!;
       expect(rect.y + rect.height).toBeLessThan(nav.y);

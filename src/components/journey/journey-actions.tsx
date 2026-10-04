@@ -51,6 +51,7 @@ export function JourneyActions({ id, title, isPublic, initialLikes }: Props) {
   }
 
   return <div className="space-y-3">
+    {isPublic && <div aria-label="Journey controls" className="rounded-2xl bg-[#e7eedf] p-4"><p className="mb-2 text-sm font-semibold text-brand">This journey can be followed.</p><a href={`/travel/${encodeURIComponent(id)}`} className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-sm font-semibold text-white sm:w-auto">Start Journey →</a><p className="mt-2 text-xs leading-5 text-stone-600">Preview Travel Mode, then start when ready. Location permission is requested when you start.</p></div>}
     <div className="flex flex-wrap gap-2">
       <button disabled={busy || loading || !!stateError || !isPublic} onClick={() => act("like")} aria-pressed={liked} aria-label={liked ? "Unlike journey" : "Like journey"} className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-60">{liked ? "♥" : "♡"} {likes} <span className="sr-only">likes</span></button>
       <button disabled={busy || loading || !!stateError || !isPublic} onClick={() => act("save")} aria-pressed={saved} title="Keep this journey for later" className="min-h-12 rounded-full border border-stone-200 bg-white px-5 text-sm font-medium disabled:opacity-60">{saved ? "Saved ✓" : "Save"}</button>

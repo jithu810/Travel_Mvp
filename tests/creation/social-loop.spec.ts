@@ -1,3 +1,4 @@
+import { selectEditorDestination } from '../fixtures/editor-destination';
 import { expect,test,type BrowserContext,type Page } from '@playwright/test';
 
 const owner='10000000-0000-0000-0000-000000000001',other='10000000-0000-0000-0000-000000000002';
@@ -52,9 +53,9 @@ test('two-user social loop, published owner edits, profiles, private saved state
 
   await page.getByLabel('Journey title').fill(title);
 
-  await page.getByRole('combobox',{ name:'Destination',exact:true }).selectOption('goa');
+  await selectEditorDestination(page, 'goa');
 
-  await page.getByRole('combobox',{ name:'Traveler type',exact:true }).selectOption('friends');
+  await page.getByRole('button', { name: /Friends/ }).click();
 
   await page.getByLabel('Duration in days').fill('3');
 

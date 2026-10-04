@@ -76,7 +76,7 @@ test('five-stop road navigation, conservative requests, follow, heading, arrival
     await page.getByRole('button', { name: 'Pause Journey' }).scrollIntoViewIfNeeded();
     const controls = (await page.getByRole('region', { name: 'Travel controls' }).boundingBox())!;
     const map = (await page.getByTestId('journey-map').boundingBox())!;
-    expect(controls.y).toBeGreaterThanOrEqual(map.y + map.height);
+    expect(controls.y).toBeGreaterThanOrEqual(map.y); expect(controls.y + controls.height).toBeLessThanOrEqual(map.y + map.height);
     if (info.project.name === 'mobile') {
       const nav = (await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox())!; expect(controls.y + controls.height).toBeLessThan(nav.y);
       await page.screenshot({ path: info.outputPath('navigation-360.png'), fullPage: true }); await page.setViewportSize({ width: 390, height: 844 });
@@ -256,15 +256,15 @@ test('navigation HUD, arrival feedback, stable camera, resume and viewport contr
     await page.clock.fastForward(1); await emitLocation(page, ...points[0] as [number, number]);
     await expect(page.getByTestId('journey-map')).toHaveAttribute('data-camera', 'FOLLOWING');
     await expect(page.getByRole('button', { name: 'Stop following' })).toHaveAttribute('aria-pressed', 'true');
-    for (const [width, height] of [[360, 800], [390, 844], [412, 915], [844, 390], [1280, 900], [1440, 900]]) {
+    for (const [width, height] of [[360, 800], [390, 844], [412, 915], [844, 390], [1280, 900], [1440, 1000]]) {
       await page.setViewportSize({ width, height });
       await page.getByTestId('journey-map').scrollIntoViewIfNeeded();
-      const mapView = (await page.getByTestId('journey-map').boundingBox())!; expect(mapView.height).toBeLessThanOrEqual(height * 0.65 + 1);
+      const mapView = (await page.getByTestId('journey-map').boundingBox())!; expect(mapView.height).toBeGreaterThan(height * 0.65);
       if (width > height) { const location = (await page.getByTestId('current-location-marker').boundingBox())!; expect(location.y).toBeGreaterThanOrEqual(0); expect(location.y + location.height).toBeLessThanOrEqual(height); }
       await page.getByTestId('road-navigation').scrollIntoViewIfNeeded(); await expect(page.getByTestId('navigation-next-stop')).toBeVisible();
       await page.getByRole('region', { name: 'Travel controls' }).scrollIntoViewIfNeeded();
       const controls = (await page.getByRole('region', { name: 'Travel controls' }).boundingBox())!, map = (await page.getByTestId('journey-map').boundingBox())!;
-      expect(controls.y).toBeGreaterThanOrEqual(map.y + map.height);
+      expect(controls.y).toBeGreaterThanOrEqual(map.y); expect(controls.y + controls.height).toBeLessThanOrEqual(map.y + map.height);
       if (width < 768) { const nav = (await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox())!; expect(controls.y + controls.height).toBeLessThan(nav.y); }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath(`hud-${width}.png`), fullPage: true });

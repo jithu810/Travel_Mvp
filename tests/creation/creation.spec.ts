@@ -1,3 +1,4 @@
+import { selectEditorDestination } from '../fixtures/editor-destination';
 import { expect,test,type BrowserContext } from '@playwright/test';
 import { validateJourney } from '../../src/lib/journey/editor';
 import { imageExtension } from '../../src/lib/journey/image-validation';
@@ -30,8 +31,8 @@ test('authenticated create/search/reorder/upload/draft refresh/publish/public di
   await page.goto('/create');
   await expect(page.getByRole('heading',{ name: 'Journey information' })).toBeVisible();
   await page.getByLabel('Journey title',{ exact: true }).fill(`3 Days in Varkala ${testInfo.project.name}`);
-  await page.getByRole('combobox',{ name: 'Destination',exact: true }).selectOption('varkala');
-  await page.getByRole('combobox',{ name: 'Traveler type',exact: true }).selectOption('couple');
+  await selectEditorDestination(page, 'varkala');
+  await page.getByRole('button', { name: /Couple/ }).click();
   await page.getByLabel('Duration in days').fill('3');
   for (const place of places) {
     await page.getByRole('combobox',{ name: 'Search for a place' }).fill(place.name);
@@ -116,8 +117,8 @@ test('search recovery only adds selected places and save errors preserve the bui
   await page.getByRole('button',{ name: 'Publish Journey',exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Enter a journey title' })).toBeVisible();
   await page.getByLabel('Journey title').fill('Selected landmark journey');
-  await page.getByRole('combobox',{ name: 'Destination',exact: true }).selectOption('varkala');
-  await page.getByRole('combobox',{ name: 'Traveler type',exact: true }).selectOption('solo');
+  await selectEditorDestination(page, 'varkala');
+  await page.getByRole('button', { name: /Solo/ }).click();
   await page.getByRole('combobox',{ name: 'Search for a place' }).fill('Unlisted landmark');
   await expect(page.getByRole('alert').filter({ hasText: 'Place search is unavailable' })).toBeVisible();
   await page.getByRole('combobox',{ name: 'Search for a place' }).press('Enter');

@@ -16,7 +16,7 @@ try {
     create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text,name text,unique(bucket_id,name));
     alter table storage.objects enable row level security;
     grant usage on schema storage to anon,authenticated; grant select on storage.objects to anon; grant select,insert,update,delete on storage.objects to authenticated;`);
-  for (const migration of ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql']) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`,import.meta.url),'utf8'));
+  for (const migration of ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql']) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`,import.meta.url),'utf8'));
   assert.deepEqual((await db.query("select public,file_size_limit::int as file_size_limit from storage.buckets where id='journey-media'")).rows[0],{ public: false,file_size_limit: 15728640 });
   await db.query('insert into auth.users(id) values($1),($2)',[owner,other]);
   await as('authenticated',owner);
@@ -131,5 +131,19 @@ try {
   await as('authenticated',owner);
   await assert.rejects(save({ ...input,id: newId,status: 'draft',updated_at: null,cover_image_path: 'https://example.com/forged.jpg' }),/Invalid image reference/);
   assert.equal((await db.query('select * from public.journeys where id=$1',[newId])).rows.length,0,'Invalid image rolls back newly created draft');
+  const worldwide = { ...input, id: '20000000-0000-0000-0000-000000000088', status: 'published', updated_at: null, cover_image_path: null, destination_slug: 'paris', destination_name: 'Paris', destination_latitude: 48.8566, destination_longitude: 2.3522, stops: input.stops.map((stop,index) => ({ ...stop,id: `30000000-0000-0000-0000-00000000008${index}`,photo_path:null,name:'Exact user location',mapbox_place_id:null,latitude:48.85661+index/100,longitude:2.35221 })) };
+  await save(worldwide);
+  const worldRow=(await db.query('select destination_name,destination_latitude from public.journeys where id=$1',[worldwide.id])).rows[0];
+  assert.equal(worldRow.destination_name,'Paris'); assert.equal(worldRow.destination_latitude,48.8566);
+  const worldStops=(await db.query('select name,latitude,mapbox_place_id from public.journey_stops where journey_id=$1 order by sequence',[worldwide.id])).rows;
+  assert.equal(worldStops[0].name,'Exact user location'); assert.equal(worldStops[0].latitude,48.85661); assert.equal(worldStops[0].mapbox_place_id,null);
+  await assert.rejects(save({ ...worldwide,destination_latitude:91 }),/Invalid destination/);
+  await assert.rejects(save({ ...worldwide,destination_name:'' }),/Invalid destination/);
+  await as('anon');
+  assert.equal((await db.query('select public.get_public_journeys(null,null,$1) as result',[worldwide.id])).rows[0].result.destination_name,'Paris');
+  await as('authenticated',other);
+  const worldCopy=(await db.query('select public.copy_journey($1) as id',[worldwide.id])).rows[0].id;
+  assert.equal((await db.query('select destination_name,destination_latitude from public.journeys where id=$1',[worldCopy])).rows[0].destination_name,'Paris');
+  await assert.rejects(save({ ...worldwide, title:'Hijacked' }),/duplicate key|row-level security/);
   console.log('PASS: two-user social loop, profile privacy/uniqueness/avatar ownership, published-only likes/saves/copy, remix chains, independent deletion; atomic create/resume/reorder/publish, owner-only editing, draft privacy, exact 1-based sequence, metadata validation, stale-version rejection, failure rollback and private/published Storage RLS.');
 } finally { await db.close(); }

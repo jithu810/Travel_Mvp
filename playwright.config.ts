@@ -12,10 +12,10 @@ export default defineConfig({
     { name: "mobile", use: { ...devices["iPhone 13"], browserName: "chromium" } },
   ],
   webServer: {
-    command: "node node_modules/next/dist/bin/next start -p 3100",
+    command: "node scripts/start-public-test.mjs",
     url: "http://localhost:3100",
     reuseExistingServer: false,
-    timeout: 60000,
+    timeout: 120000,
     env: { NEXT_PUBLIC_SUPABASE_URL: "", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "", NEXT_PUBLIC_SUPABASE_ANON_KEY: "", NEXT_PUBLIC_MAPBOX_TOKEN: "" },
   },
 });

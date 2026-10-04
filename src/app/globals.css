@@ -54,3 +54,33 @@ summary:focus-visible {
 .journey-current-location { width: 24px; height: 24px; border: 4px solid white; border-radius: 50%; background: #1d4ed8; box-shadow: 0 0 0 6px #1d4ed833, 0 2px 8px #0004; pointer-events: none; }
 
 .journey-current-location.has-heading::after { content: ""; position: absolute; left: 2px; top: -16px; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 12px solid #1d4ed8; }
+
+.travel-map-frame { position: relative; height: max(540px, 76dvh); isolation: isolate; }
+.travel-map-frame > section { height: 100%; }
+.travel-map-frame > section > div, .travel-map-frame [data-testid="journey-map"] { height: 100%; }
+.travel-map-frame > section > p:last-child { display: none; }
+.travel-map-frame.is-expanded { position: fixed; inset: 0; z-index: 60; height: 100dvh; background: white; }
+.travel-map-frame.is-expanded > section { border-radius: 0; }
+.travel-map-hud { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 8px; width: min(380px, calc(100% - 108px)); z-index: 5; }
+.travel-map-bottom { position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 8px; right: 8px; z-index: 5; }
+.navigation-compact > div { padding: 10px 12px; }
+.navigation-compact h2 { font-size: 16px; line-height: 1.3; margin-top: 0; }
+.navigation-compact dl { margin-top: 6px; gap: 16px; }
+.navigation-compact dd { font-size: 16px; margin-top: 0; }
+.navigation-compact [data-testid="next-maneuver"] { margin-top: 6px; padding-top: 6px; }
+.navigation-compact [data-testid="next-maneuver"] p:first-child { font-size: 16px; }
+.navigation-compact details { max-height: 20dvh; overflow-y: auto; }
+.navigation-compact summary { padding: 6px 0; }
+.navigation-compact [data-testid="navigation-status"] { margin-top: 4px; font-size: 12px; }
+.travel-map-frame button { touch-action: manipulation; }
+.travel-map-frame button[class*="absolute top-"] { left: auto; right: 8px; padding: 4px 8px; max-width: 92px; font-size: 11px; }
+.travel-map-frame button[class*="absolute top-3"] { top: 112px; }
+.travel-map-frame button[class*="absolute top-16"] { top: 164px; }
+.travel-map-frame [data-testid="camera-status"] { bottom: 176px; font-size: 10px; }
+@media (min-width: 768px) { .travel-map-bottom { left: auto; width: min(460px, calc(100% - 16px)); } }
+@media (max-height: 500px) and (orientation: landscape) {
+  .travel-map-frame { height: max(350px, 90dvh); }
+  .travel-map-hud { width: 300px; }
+  .travel-map-bottom { left: auto; width: min(380px, calc(100% - 324px)); }
+  .navigation-compact details { display: none; }
+}

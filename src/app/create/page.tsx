@@ -22,7 +22,7 @@ export default async function CreatePage({ searchParams }: { searchParams: Promi
     if (!journey) notFound();
     const { data: stops,error: stopError } = await client.from('journey_stops').select('*').eq('journey_id',target).order('sequence');
     if (stopError) throw new Error('Unable to load draft stops. Please try again.');
-    initial = { id: journey.id,title: journey.title,description: journey.description || '',destination_slug: journey.destination_slug || '',traveler_type: journey.traveler_type || '',duration_days: journey.duration_days,cover_image_path: journey.cover_image_path,status: journey.status,updated_at: journey.updated_at,
+    initial = { id: journey.id,title: journey.title,description: journey.description || '',destination_slug: journey.destination_slug || '',destination_name: journey.destination_name,destination_latitude: journey.destination_latitude,destination_longitude: journey.destination_longitude,traveler_type: journey.traveler_type || '',duration_days: journey.duration_days,cover_image_path: journey.cover_image_path,status: journey.status,updated_at: journey.updated_at,
       stops: (stops || []).map((stop,index) => ({ id: stop.id,sequence: index + 1,name: stop.name,description: stop.description || '',latitude: stop.latitude,longitude: stop.longitude,mapbox_place_id: stop.mapbox_place_id,photo_path: stop.photo_path,rating: stop.rating,day_number: stop.day_number })) };
     images = Object.fromEntries(await resolveMedia(client,[initial.cover_image_path,...initial.stops.map(stop => stop.photo_path)]));
   }

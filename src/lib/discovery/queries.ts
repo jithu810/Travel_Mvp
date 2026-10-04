@@ -11,7 +11,7 @@ import type { ExploreResult } from './explore-types';
 import { matchesStop, storedCoordinates } from './explore-geography';
 
 export type PublicRow = {
-  id: string; title: string; description: string | null; destination_slug: string;
+  id: string; title: string; description: string | null; destination_slug: string; destination_name?: string | null;
   traveler_type: Journey["travelerType"]; duration_days: number; cover_image_path: string | null;
   creator_id?: string; creator_username?: string; status?: string; saved?: boolean; creator_name: string; creator_avatar: string | null; likes_count: number; is_demo: boolean;
   stops: { id: string; name: string; description: string | null; position: number }[];

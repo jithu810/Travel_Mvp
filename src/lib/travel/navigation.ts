@@ -15,10 +15,12 @@ type Point = { latitude: number; longitude: number };
 export type NavigationDestination = { id: string; name: string; latitude: number | null; longitude: number | null };
 export type NavigationStep = { instruction: string; type: string; distance: number; geometry: RoadGeometry };
 export type RoadRoute = { geometry: RoadGeometry; distance: number; duration: number | null; steps: NavigationStep[] };
-export type NavigationInput = { status: TravelStatus; fix: LocationFix | null; destination: NavigationDestination | undefined; online: boolean };
+export type Transportation = 'driving' | 'walking';
+export type NavigationInput = { status: TravelStatus; fix: LocationFix | null; destination: NavigationDestination | undefined; online: boolean; transportation?: Transportation };
 export type NavigationState = { destinationKey: string; route: RoadRoute | null; status: 'idle' | 'calculating' | 'rerouting' | 'active' | 'unavailable'; warning: string; calculatedAt: number; routeStale: boolean; checkingRoute: boolean; notice: string };
 export const emptyNavigation = (): NavigationState => ({ destinationKey: '', route: null, status: 'idle', warning: '', calculatedAt: 0, routeStale: false, checkingRoute: false, notice: '' });
 export function destinationKey(destination: NavigationDestination | undefined) { return destination && hasCoordinates(destination) ? `${destination.id}:${destination.longitude}:${destination.latitude}` : ''; }
+export function navigationKey(input: Pick<NavigationInput, 'destination' | 'transportation'>) { const key = destinationKey(input.destination); return key ? `${key}:${input.transportation || 'driving'}` : ''; }
 export function routingReady(input: NavigationInput, now = Date.now()) { return input.status === 'ACTIVE' && !!destinationKey(input.destination) && !!input.fix && freshLocation(input.fix, now) && input.fix.accuracy <= MAX_ARRIVAL_ACCURACY_METERS; }
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {};
 const nonnegative = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
@@ -74,17 +76,17 @@ export function nextManeuver(route: RoadRoute, fix: LocationFix | null) {
   return step ? { instruction: step.instruction, type: step.type, distance: match.remaining } : null;
 }
 
-export async function requestRoadRoute(origin: Point, destination: Point, token: string, signal: AbortSignal, transport: typeof fetch = fetch): Promise<RoadRoute> {
+export async function requestRoadRoute(origin: Point, destination: Point, token: string, signal: AbortSignal, transport: typeof fetch = fetch, transportation: Transportation = 'driving'): Promise<RoadRoute> {
   if (!hasCoordinates(origin) || !hasCoordinates(destination)) throw new RoutingError('Navigation unavailable for these coordinates.');
   if (!token || !token.startsWith('pk.')) throw new RoutingError('Road routing needs a valid public Mapbox token.');
   // POST keeps precise coordinates out of URLs; only the provider receives this body.
   const body = new URLSearchParams({ coordinates: `${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}`, geometries: 'geojson', overview: 'full', steps: 'true', alternatives: 'false', language: 'en' });
-  const response = await transport(`https://api.mapbox.com/directions/v5/mapbox/driving?access_token=${encodeURIComponent(token)}`, { method: 'POST', body, signal, cache: 'no-store', credentials: 'omit' });
+  const response = await transport(`https://api.mapbox.com/directions/v5/mapbox/${transportation}?access_token=${encodeURIComponent(token)}`, { method: 'POST', body, signal, cache: 'no-store', credentials: 'omit' });
   if (!response.ok) throw new RoutingError(response.status === 401 || response.status === 403 ? 'Mapbox token or allowed-origin configuration needs attention.' : response.status === 429 ? 'Mapbox request limit reached. Wait before retrying route.' : 'Mapbox routing is temporarily unavailable. Retry route.');
-  try { return parseRoadRoute(await response.json()); } catch (error) { if (error instanceof RoutingError) throw error; throw new RoutingError('Mapbox returned an invalid routing response. Retry route.'); }
+  try { return parseRoadRoute(await response.json()); } catch (error) { if (error instanceof RoutingError) throw new RoutingError(transportation === 'walking' && error.message.startsWith('No road route') ? 'No walking route found for these locations. You can continue manually or choose Driving.' : error.message); throw new RoutingError('Mapbox returned an invalid routing response. Retry route.'); }
 }
 
-export type RouteLoader = (origin: Point, destination: Point, signal: AbortSignal) => Promise<RoadRoute>;
+export type RouteLoader = (origin: Point, destination: Point, signal: AbortSignal, transportation: Transportation) => Promise<RoadRoute>;
 // One in-memory route, one request, no GPS history or persistent track.
 export class NavigationController {
   private state = emptyNavigation();
@@ -106,7 +108,7 @@ export class NavigationController {
   stop() { this.cancel(); this.input = null; this.origin = null; this.attemptedAt = 0; this.failed = false; this.lastRerouteAt = 0; this.deviation.reset(); this.publish(emptyNavigation()); }
   update(input: NavigationInput, retry = false) {
     this.input = input;
-    const key = destinationKey(input.destination), now = this.now();
+    const key = navigationKey(input), now = this.now();
     if (this.state.notice && now - this.state.calculatedAt >= NAVIGATION_NOTICE_DURATION_MS) this.publish({ notice: '' });
     if (input.status !== 'ACTIVE' || !key) { this.stop(); return; }
     if (key !== this.state.destinationKey) {
@@ -133,8 +135,8 @@ export class NavigationController {
     if (rerouting) this.lastRerouteAt = now;
     this.publish({ status: rerouting ? 'rerouting' : 'calculating', checkingRoute: false, warning: '', notice: '' });
     const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
-    void this.load(input.fix!, input.destination as NavigationDestination & Point, controller.signal).then(route => {
-      if (sequence !== this.sequence || !this.input || !routingReady(this.input, this.now()) || key !== destinationKey(this.input.destination)) return;
+    void this.load(input.fix!, input.destination as NavigationDestination & Point, controller.signal, input.transportation || 'driving').then(route => {
+      if (sequence !== this.sequence || !this.input || !routingReady(this.input, this.now()) || key !== navigationKey(this.input)) return;
       if (distanceMeters(input.fix!, this.input.fix!) >= ROUTE_MOVEMENT_METERS) { this.publish({ status: this.state.route ? 'active' : 'idle', warning: 'Position changed while calculating. Waiting to refresh route.' }); return; }
       this.deviation.reset();
       this.publish({ route, status: 'active', calculatedAt: this.now(), warning: '', routeStale: false, checkingRoute: false, notice: rerouting ? 'Route updated' : '' });

@@ -14,6 +14,7 @@ import { GpsStatus } from './gps-status';
 import { useTravelNavigation } from './use-travel-navigation';
 import { NavigationPanel } from './navigation-panel';
 import { useTravelTrack } from './use-travel-track';
+import type { Transportation } from '@/lib/travel/navigation';
 
 const primary = 'min-h-12 rounded-full bg-brand px-6 text-sm font-semibold text-white disabled:opacity-50';
 const ARRIVAL_FEEDBACK_MS = 6_000;
@@ -30,6 +31,19 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [detail, setDetail] = useState<JourneyStop | null>(null);
   const [ending, setEnding] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [transportation, setTransportation] = useState<Transportation>('driving');
+  const [showProgress, setShowProgress] = useState(false);
+  const expandButton = useRef<HTMLButtonElement>(null);
+  const mapFrame = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { setExpanded(false); expandButton.current?.focus(); } };
+    window.addEventListener('keydown', escape);
+    return () => { document.body.style.overflow = overflow; window.removeEventListener('keydown', escape); };
+  }, [expanded]);
   const key = travelStorageKey(journey.id);
   const track = useTravelTrack(journey.id, session.status, ready);
   const gps = useTravelLocation(ready && track.ready && session.status === 'ACTIVE', fix => {
@@ -72,6 +86,7 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
     if (next.status !== 'ACTIVE') gps.stop();
     track.change(previous.status, next.status);
     setSession(next);
+    if (event.type === 'START' || event.type === 'RESUME') mapFrame.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     setNotice('');
     setArrival(event.type === 'COMPLETE_STOP' && next !== previous ? { stopId: event.stopId, message: `${stops.find(stop => stop.id === event.stopId)?.name || 'Stop'}${source === 'gps' ? ' reached. Arrival detected by GPS.' : ' marked complete manually.'}` } : null);
     try { sessionStorage.setItem(key, JSON.stringify(next)); } catch { setStorageAvailable(false); }
@@ -79,7 +94,7 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
 
   const count = session.completedIds.length;
   const next = stops[count];
-  const navigationInput = useMemo(() => ({ status: session.status, destination: next, fix: gps.fix }), [session.status, next, gps.fix]);
+  const navigationInput = useMemo(() => ({ status: session.status, destination: next, fix: gps.fix, transportation }), [session.status, next, gps.fix, transportation]);
   const navigation = useTravelNavigation(navigationInput);
   const finished = session.status === 'COMPLETED';
   const cancelled = session.status === 'CANCELLED';
@@ -87,8 +102,37 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
   const percentage = stops.length ? Math.round(count / stops.length * 100) : 0;
 
   return <article data-testid="travel-mode" data-state={session.status} className="space-y-6 sm:space-y-8">
-    <header><Link href={`/journey/${encodeURIComponent(journey.id)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">← Back to Journey</Link><p className="mt-2 text-xs font-semibold tracking-wider text-brand uppercase">Travel Mode · GPS assisted</p><h1 className="mt-3 break-words text-3xl font-semibold tracking-tight sm:text-4xl">{journey.title}</h1><p className="mt-3 text-sm leading-6 text-stone-600">Follow the creator’s stops with GPS-assisted road directions. Progress stays in this browser tab.</p></header>
-    <JourneyMap stops={stops} selectedId={progress.currentId} onSelect={id => setDetail(stops.find(stop => stop.id === id) || null)} story progress={progress} locationEnabled currentLocation={gps.fix} navigationRoute={navigation.route?.geometry} travelledTrack={track.geometry} navigationMode travelStatus={session.status}/>
+    <header><div className="flex flex-wrap items-center justify-between gap-2"><Link href={`/journey/${encodeURIComponent(journey.id)}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">← Back to Journey</Link><p className="text-xs font-semibold text-brand">Travel Mode · GPS assisted</p></div><h1 className="break-words text-xl font-semibold tracking-tight sm:text-2xl">{journey.title}</h1></header>
+    <section ref={mapFrame} aria-label="Travel map and navigation" role={expanded ? 'dialog' : undefined} aria-modal={expanded || undefined} data-testid="travel-map-frame" data-expanded={expanded} onKeyDown={event => {
+      if (!expanded || event.key !== 'Tab') return;
+      const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], summary, [tabindex="0"]')].filter(element => element.getClientRects().length);
+      const first = buttons[0], last = buttons.at(-1);
+      if (first && last && (event.shiftKey ? document.activeElement === first : document.activeElement === last)) { event.preventDefault(); (event.shiftKey ? last : first).focus(); }
+    }} className={`travel-map-frame ${expanded ? 'is-expanded' : ''}`}>
+      <JourneyMap stops={stops} selectedId={progress.currentId} onSelect={id => setDetail(stops.find(stop => stop.id === id) || null)} story progress={progress} locationEnabled currentLocation={gps.fix} navigationRoute={navigation.route?.geometry} travelledTrack={track.geometry} navigationMode travelStatus={session.status}/>
+      <div className="travel-map-hud">
+        <NavigationPanel navigation={navigation} destination={next} status={session.status} fix={gps.fix} gpsStatus={gps.status} retry={navigation.retry} transportation={transportation} compact/>
+        <div className="mt-1 flex items-center gap-1 rounded-xl bg-white/95 p-1 shadow" aria-label="Transportation">
+          {(['driving', 'walking'] as const).map(mode => <button key={mode} type="button" aria-pressed={transportation === mode} onClick={() => setTransportation(mode)} className={`min-h-11 min-w-0 flex-1 rounded-lg px-1 text-xs font-semibold whitespace-nowrap ${transportation === mode ? 'bg-brand text-white' : 'text-brand'}`}>{mode === 'driving' ? '🚗 Driving' : '🚶 Walking'}</button>)}
+          <button ref={expandButton} type="button" aria-label={expanded ? 'Collapse map' : 'Expand map'} title={expanded ? 'Collapse map' : 'Expand map'} aria-expanded={expanded} onClick={() => setExpanded(value => !value)} className="min-h-11 min-w-11 rounded-lg text-lg font-semibold text-brand">{expanded ? '↙' : '⛶'}</button>
+        </div>
+        {session.status === 'NOT_STARTED' && stops.length > 0 && <button type="button" disabled={!ready || !track.ready} onClick={() => send({ type: 'START' })} className={primary + ' mt-1 w-full shadow'}>Start Journey</button>}
+      </div>
+      <div className="travel-map-bottom">
+        {arrival && <p role="status" className="mb-1 rounded-xl bg-[#e7eedf] p-2 text-sm font-semibold text-brand">✓ {arrival.message}</p>}
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-white/95 px-3 shadow">
+          <span className="text-xs font-semibold text-brand">GPS · {session.status === 'ACTIVE' ? gps.status.toLowerCase().replaceAll('_', ' ') : session.status.toLowerCase().replaceAll('_', ' ')}</span>
+          {session.status === 'ACTIVE' && ['DENIED', 'UNAVAILABLE', 'TIMEOUT', 'INVALID', 'STALE'].includes(gps.status) && <button type="button" onClick={gps.retry} className="min-h-11 text-xs font-semibold text-brand">{gps.status === 'DENIED' ? 'Check location permission' : 'Retry GPS'}</button>}
+          <button type="button" aria-expanded={showProgress} aria-controls="map-stop-progress" onClick={() => setShowProgress(value => !value)} className="min-h-11 text-xs font-semibold text-brand">{count}/{stops.length} stops · {showProgress ? 'Hide progress' : 'Show progress'}</button>
+        </div>
+        {showProgress && <section id="map-stop-progress" aria-label="Map stop progress" className="max-h-[25dvh] overflow-y-auto rounded-xl bg-white p-3 shadow"><ol>{stops.map((stop, index) => <li key={stop.id}><button type="button" onClick={() => setDetail(stop)} className="min-h-11 w-full text-left text-sm">{index < count ? '✓ Completed' : index === count && !finished && !cancelled ? '→ Current' : '○ Upcoming'} · {stop.name}</button></li>)}</ol></section>}
+        {stops.length > 0 && !finished && !cancelled && session.status !== 'NOT_STARTED' && <section aria-label="Travel controls" className="mt-1 rounded-xl bg-white/95 p-2 shadow"><div className="flex flex-wrap gap-2">
+          {session.status === 'ACTIVE' && <><button type="button" onClick={() => next && send({ type: 'COMPLETE_STOP', stopId: next.id })} className={secondary + ' flex-1'}>Mark Stop Complete</button><button type="button" onClick={() => send({ type: 'PAUSE' })} className={primary}>Pause Journey</button></>}
+          {session.status === 'PAUSED' && <button type="button" onClick={() => send({ type: 'RESUME' })} className={primary + ' flex-1'}>Resume Journey</button>}
+          <button type="button" onClick={() => setEnding(true)} className="min-h-11 px-2 text-sm font-semibold text-stone-600 underline">End Journey</button>
+        </div></section>}
+      </div>
+    </section>
     <div aria-label="Map legend" className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-stone-600"><span>● Blue dot: you are here</span><span>━ Blue: live road route</span><span>━ Purple: travelled track</span><span>┄ Green: planned journey</span></div>
     <section aria-label="Travelled track" data-testid="travel-track" data-points={track.track?.points.length || 0} data-segments={track.track?.points.length ? track.track.points.at(-1)![4] + 1 : 0} data-sync={track.sync} className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4 text-sm leading-6">
       <p className="font-semibold text-purple-900">Your travelled track · private</p>
@@ -100,8 +144,7 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
       {track.track?.ownerId && track.sync === 'pending' && <button type="button" onClick={track.retry} className="min-h-11 font-semibold text-purple-900 underline">Retry private sync</button>}
     </section>
     {arrival && <div role="status" data-testid="travel-arrival" className="rounded-2xl border border-brand/20 bg-[#e7eedf] px-4 py-3"><p className="font-semibold text-brand">✓ {arrival.message}</p><p className="mt-1 text-sm text-stone-700">{finished ? 'All stops complete. Your journey is finished.' : `Next: ${next?.name || 'no remaining stop'}`}</p></div>}
-    <NavigationPanel navigation={navigation} destination={next} status={session.status} fix={gps.fix} gpsStatus={gps.status} retry={navigation.retry}/>
-    <GpsStatus status={gps.status} fix={gps.fix} travelStatus={session.status} retry={gps.retry} trackPrivacy/>
+    <GpsStatus status={gps.status} fix={gps.fix} travelStatus={session.status} retry={gps.retry} trackPrivacy hideRetry/>
     {!ready && <p role="status" className="text-sm text-stone-500">Checking this tab’s simulation…</p>}
     {!storageAvailable && <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">Browser storage is unavailable. You can still follow this journey, but progress will reset after a refresh.</p>}
     {notice && <p role="status" className="text-sm leading-6 text-brand">{notice}</p>}
@@ -124,11 +167,6 @@ export function TravelMode({ journey }: { journey: JourneyDetail }) {
         return <li key={stop.id} data-testid="travel-stop" data-stop-state={status} data-recently-completed={arrival?.stopId === stop.id ? true : undefined}><button type="button" onClick={() => setDetail(stop)} aria-current={status === 'Current / next' ? 'step' : undefined} className={`flex min-h-14 w-full scroll-mb-64 items-start gap-3 rounded-2xl p-3 text-left md:scroll-mb-48 ${status === 'Current / next' ? 'border border-brand/30 bg-[#e7eedf]' : arrival?.stopId === stop.id ? 'bg-[#e7eedf]/60' : 'hover:bg-stone-100'}`}><span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white font-bold text-brand">{status === 'Completed' ? '✓' : status === 'Current / next' ? '→' : '○'}</span><span className="min-w-0"><span className="block break-words font-semibold">{stop.name}</span><span className="mt-1 block text-xs text-stone-600">Stop {index + 1} · {status}</span></span></button></li>;
       })}</ol></section>
     </div>
-    {stops.length > 0 && !finished && !cancelled && <section aria-label="Travel controls" className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 rounded-2xl border border-stone-200 bg-white p-4 shadow-lg md:bottom-3"><p className="mb-3 text-xs font-semibold text-stone-600">{session.status === 'ACTIVE' ? 'GPS assisted · manual completion always available' : 'Journey controls'}</p><div className="flex flex-wrap gap-3">
-      {session.status === 'NOT_STARTED' && <button type="button" disabled={!ready || !track.ready} onClick={() => send({ type: 'START' })} className={primary + ' flex-1'}>Start Journey</button>}
-      {session.status === 'ACTIVE' && <><button type="button" onClick={() => next && send({ type: 'COMPLETE_STOP', stopId: next.id })} className={secondary + ' flex-1'}>Mark Stop Complete</button><button type="button" onClick={() => send({ type: 'PAUSE' })} className={primary}>Pause Journey</button></>}
-      {session.status === 'PAUSED' && <button type="button" onClick={() => send({ type: 'RESUME' })} className={primary + ' flex-1'}>Resume Journey</button>}
-    </div>{session.status !== 'NOT_STARTED' && <div className="mt-3 border-t border-stone-200 pt-1"><button type="button" onClick={() => setEnding(true)} className="min-h-11 px-2 text-sm font-semibold text-stone-600 underline">End Journey</button></div>}</section>}
     </div>
     {detail && <TravelDialog title={detail.name} onClose={() => setDetail(null)}><p className="mt-4 text-sm text-stone-500">Stop {stops.findIndex(stop => stop.id === detail.id) + 1} of {stops.length}{detail.dayNumber != null ? ` · Day ${detail.dayNumber}` : ''}</p>{detail.description && <p className="mt-4 whitespace-pre-line break-words leading-7 text-stone-600">{detail.description}</p>}{detail.photo && <StopPhoto key={detail.photo} src={detail.photo} name={detail.name}/>}</TravelDialog>}
     {ending && <TravelDialog title="End this journey?" onClose={() => setEnding(false)}><p className="mt-4 text-sm leading-7 text-stone-600">This stops location tracking and ends your local session with {count} of {stops.length} stops complete. The original journey stays unchanged.</p><div className="mt-5 flex flex-wrap gap-3"><button type="button" onClick={() => { send({ type: 'END' }); setEnding(false); }} className={primary}>Confirm End</button><button type="button" onClick={() => setEnding(false)} className={secondary}>Keep Traveling</button></div></TravelDialog>}

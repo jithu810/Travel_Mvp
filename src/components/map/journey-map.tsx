@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getMapboxToken } from "@/lib/env";
 import { buildMapData } from "@/lib/journey/map-data";
 import type { JourneyStop } from "@/lib/journey/types";
@@ -104,8 +104,8 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
           const heading = document.createElement("strong"); heading.textContent = `${stop.number}. ${stop.name}`;
           const description = document.createElement("p"); description.textContent = stop.description.slice(0, 180);
           popupContent.append(heading, description);
-          const marker = new mapbox.Marker({ element: button }).setLngLat([stop.longitude, stop.latitude])
-            .setPopup(new mapbox.Popup({ offset: 24, ...(story ? { focusAfterOpen: false } : {}) }).setDOMContent(popupContent)).addTo(map);
+          const marker = new mapbox.Marker({ element: button }).setLngLat([stop.longitude, stop.latitude]).addTo(map);
+          if (!navigationMode) marker.setPopup(new mapbox.Popup({ offset: 24, ...(story ? { focusAfterOpen: false } : {}) }).setDOMContent(popupContent));
           button.setAttribute("role", "button");
           button.addEventListener("click", () => selectRef.current(stop.id));
           markersRef.current.push({ id: stop.id, marker, button });
@@ -168,9 +168,10 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
     return () => { disposed = true; };
   }, [currentLocation, state, navigationMode, travelStatus]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const map = mapRef.current;
     if (!map || state !== 'ready') return;
+    // Clear obsolete blue geometry before the browser paints a new destination/profile.
     const source = map.getSource('travel-navigation') as import('mapbox-gl').GeoJSONSource | undefined;
     const line: { type: 'Feature'; properties: Record<string, never>; geometry: RoadGeometry } = { type: 'Feature', properties: {}, geometry: navigationRoute || { type: 'LineString', coordinates: [] } };
     if (source) source.setData(line);
@@ -216,10 +217,10 @@ export function JourneyMap({ stops, selectedId, onSelect, story = false, progres
       if (status) button.dataset.progress = status;
       else delete button.dataset.progress;
       button.setAttribute("aria-pressed", String(selected)); button.classList.toggle("is-selected", selected);
-      if (selected && !marker.getPopup()?.isOpen()) marker.togglePopup();
+      if (selected && !navigationMode && !marker.getPopup()?.isOpen()) marker.togglePopup();
       else if (!selected && marker.getPopup()?.isOpen()) marker.getPopup()?.remove();
     });
-  }, [selectedId, state, progress, data]);
+  }, [selectedId, state, progress, data, navigationMode]);
 
   const selected = data.markers.find((stop) => stop.id === selectedId);
   const fallback = !token || state === "error" || !data.markers.length;

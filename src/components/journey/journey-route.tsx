@@ -7,7 +7,7 @@ import { StopPhoto } from './stop-photo';
 import { orderedStops } from "@/lib/journey/map-data";
 import type { JourneyStop } from "@/lib/journey/types";
 
-export function JourneyRoute({ stops, children, travelHref }: { stops: JourneyStop[]; children?: ReactNode; travelHref?: string }) {
+export function JourneyRoute({ stops, children, controls, travelHref }: { stops: JourneyStop[]; children?: ReactNode; controls?: ReactNode; travelHref?: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const sorted = useMemo(() => orderedStops(stops), [stops]);
   function selectFromMap(id: string) {
@@ -17,6 +17,7 @@ export function JourneyRoute({ stops, children, travelHref }: { stops: JourneySt
     element?.focus({ preventScroll: true });
   }
   return <div className="space-y-10 sm:space-y-14">
+    {controls}
     <section id="journey-route" aria-label="Journey map overview" className="scroll-mt-6"><JourneyMap stops={stops} selectedId={selected} onSelect={selectFromMap} story />
       {travelHref && <div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-xl text-sm leading-6 text-stone-600">Follow the creator’s stops in Travel Mode. GPS can detect arrivals after you start; manual completion remains available. Progress stays in this browser tab.</p><Link href={travelHref} className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">Preview Travel Mode →</Link></div>}
     </section>

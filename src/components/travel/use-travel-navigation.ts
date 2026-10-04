@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { getMapboxToken } from '@/lib/env';
-import { destinationKey, emptyNavigation, NavigationController, requestRoadRoute, type NavigationInput } from '@/lib/travel/navigation';
+import { navigationKey, emptyNavigation, NavigationController, requestRoadRoute, type NavigationInput } from '@/lib/travel/navigation';
 
 export function useTravelNavigation(input: Omit<NavigationInput, 'online'>) {
   const [state, setState] = useState(emptyNavigation);
@@ -10,7 +10,7 @@ export function useTravelNavigation(input: Omit<NavigationInput, 'online'>) {
   const token = getMapboxToken() || '';
   useEffect(() => { latest.current = input; }, [input]);
   useEffect(() => {
-    const service = new NavigationController((origin, destination, signal) => requestRoadRoute(origin, destination, token, signal), setState);
+    const service = new NavigationController((origin, destination, signal, transportation) => requestRoadRoute(origin, destination, token, signal, fetch, transportation), setState);
     controller.current = service;
     const update = () => service.update({ ...latest.current, online: navigator.onLine });
     const initial = setTimeout(update, 0), tick = setInterval(update, 2000);
@@ -22,6 +22,6 @@ export function useTravelNavigation(input: Omit<NavigationInput, 'online'>) {
     return () => clearTimeout(timer);
   }, [input]);
   // Never expose a previous destination's route, even before effect cleanup runs.
-  const visible = input.status === 'ACTIVE' && destinationKey(input.destination) === state.destinationKey ? state : emptyNavigation();
+  const visible = input.status === 'ACTIVE' && navigationKey(input) === state.destinationKey ? state : emptyNavigation();
   return { ...visible, retry: () => controller.current?.update({ ...latest.current, online: navigator.onLine }, true) };
 }

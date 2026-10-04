@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const row = await publicJourneySeo(id).catch(() => null);
   if (!row) return privateMetadata();
-  const destination = getDestination(row.destination_slug)?.name || 'Travel';
+  const destination = row.destination_name || getDestination(row.destination_slug)?.name || 'Travel';
   const traveler = row.traveler_type ? row.traveler_type[0].toUpperCase() + row.traveler_type.slice(1) : '';
   return publicMetadata(`${row.title} — ${traveler} Journey in ${destination}`, plainDescription(row.description || '', `Explore this ${traveler.toLowerCase()} journey through ${destination}, following the creator's ordered stops.`), `/journey/${encodeURIComponent(id)}`, row.cover_image_path, !row.is_demo);
 }
@@ -34,11 +34,11 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
       name: publicRow.title, description: plainDescription(publicRow.description || '', 'A shared travel journey.'),
       url: siteUrl(`/journey/${encodeURIComponent(id)}`), image: seoImage(publicRow.cover_image_path),
       author: { '@type': 'Person', name: publicRow.creator_name || 'Traveler', ...(publicRow.creator_username ? { url: siteUrl(`/profile/${encodeURIComponent(publicRow.creator_username)}`) } : {}) },
-      about: { '@type': 'Place', name: getDestination(publicRow.destination_slug)?.name || publicRow.destination_slug },
+      about: { '@type': 'Place', name: publicRow.destination_name || getDestination(publicRow.destination_slug)?.name || publicRow.destination_slug },
       ...(publicRow.traveler_type ? { audience: { '@type': 'Audience', audienceType: publicRow.traveler_type } } : {}),
     }} />}
     <Link href={destination ? `/destination/${journey.destinationSlug}` : "/explore"} className="inline-flex min-h-11 items-center text-sm font-medium text-stone-500">← Explore {destination?.name || "journeys"}</Link>
-    <JourneyRoute stops={journey.stops} travelHref={journey.status === 'published' ? `/travel/${encodeURIComponent(id)}` : undefined}>
+    <JourneyRoute stops={journey.stops} travelHref={journey.status === 'published' ? `/travel/${encodeURIComponent(id)}` : undefined} controls={<JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>}>
     <div className="grid items-start gap-8 md:grid-cols-[1.4fr_0.6fr]">
     <header className="max-w-3xl space-y-5">
       <div className="flex flex-wrap gap-2">{destination && <Link href={`/destination/${journey.destinationSlug}`} className="rounded-full bg-[#e7eedf] px-3 py-2 text-xs font-semibold text-brand">{destination.name}</Link>}{journey.travelerType && <span className="rounded-full bg-stone-100 px-3 py-2 text-xs capitalize">{journey.travelerType}</span>}{journey.isDemo && <span className="rounded-full bg-amber-50 px-3 py-2 text-xs text-amber-800">Demo journey</span>}{journey.status === "draft" && <span className="rounded-full bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Private draft · Only you</span>}</div>
@@ -51,7 +51,6 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
     <div className="relative aspect-[16/10] overflow-hidden rounded-3xl bg-stone-200 md:aspect-[4/5]"><TravelImage src={journey.coverImage} alt={`${destination?.name || "Travel"} journey cover`} sizes="(max-width: 768px) 100vw, 360px" priority/></div>
     </div>
     {owner && <OwnerActions id={id}/>}
-    <JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>
     {journey.status === "draft" && <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">This journey is private. It is not visible in public discovery. <Link href={`/create?draft=${id}`} className="font-semibold underline">Continue editing your draft →</Link></p>}
     {journey.copiedFrom && <p className="text-sm text-stone-500">{source ? <>Remixed from <Link href={`/journey/${source.id}`} className="underline">{source.title}</Link></> : 'Remixed from a journey that is no longer publicly available.'}</p>}
     {journey.isDemo && <p className="rounded-2xl bg-[#e7eedf] p-4 text-sm leading-6">This is a sample journey created for the Journey demo, not a real user post. Stops and approximate map positions illustrate a route; they are not verified travel instructions.</p>}

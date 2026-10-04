@@ -67,7 +67,7 @@ const server=http.createServer(async(request,response)=>{
     const input=body.payload,current=journeys.get(input.id);
     if (current && current.user_id!==uid) return json({ code:'42501',message:'Owner only' },403);
     if (current && current.updated_at!==input.updated_at) return json({ code:'40001',message:'Conflict' },409);
-    const destination={ goa:['Goa',15.49,73.83],varkala:['Varkala',8.74,76.72],munnar:['Munnar',10.09,77.06],kochi:['Kochi',9.97,76.28],thenkasi:['Thenkasi',8.96,77.31] }[input.destination_slug];
+    const destination=input.destination_name ? [input.destination_name,input.destination_latitude,input.destination_longitude] : { goa:['Goa',15.49,73.83],varkala:['Varkala',8.74,76.72],munnar:['Munnar',10.09,77.06],kochi:['Kochi',9.97,76.28],thenkasi:['Thenkasi',8.96,77.31] }[input.destination_slug];
     const saved={ ...current,...input,destination_name:destination?.[0],destination_latitude:destination?.[1],destination_longitude:destination?.[2],user_id:uid,published_at:input.status==='published' ? current?.published_at || new Date().toISOString() : null,updated_at:new Date().toISOString(),is_demo:false };
     journeys.set(input.id,saved); return json({ id:saved.id,status:saved.status,updated_at:saved.updated_at });
   }

@@ -92,7 +92,7 @@ test('GPS five-stop journey lifecycle, ordered arrivals, fresh refresh and map p
     await page.getByRole('button', { name: 'Pause Journey', exact: true }).scrollIntoViewIfNeeded();
     const controls = (await page.getByRole('region', { name: 'Travel controls' }).boundingBox())!;
     const map = (await page.getByTestId('journey-map').boundingBox())!;
-    expect(controls.y).toBeGreaterThanOrEqual(map.y + map.height);
+    expect(controls.y).toBeGreaterThanOrEqual(map.y); expect(controls.y + controls.height).toBeLessThanOrEqual(map.y + map.height);
     if (info.project.name === 'mobile') {
       const nav = (await page.getByRole('navigation', { name: 'Mobile navigation' }).boundingBox())!;
       expect(controls.y + controls.height).toBeLessThan(nav.y);

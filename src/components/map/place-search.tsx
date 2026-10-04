@@ -22,7 +22,7 @@ export function PlaceSearch({ onAdd, latitude, longitude, disabled }: { onAdd: (
     const timer = setTimeout(async () => {
       setLoading(true); setError('');
       try {
-        const features = await searchMapboxPlaces(query, token, { country: 'in', proximity: [longitude, latitude] }, controller.signal);
+        const features = await searchMapboxPlaces(query, token, { proximity: [longitude, latitude] }, controller.signal);
         if (id === generation.current) {
           setResults(features); setActive(features.length ? 0 : -1); setSearched(true);
         }
