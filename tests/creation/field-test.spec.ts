@@ -172,6 +172,17 @@ test('live Standard map remains usable in normal and expanded layouts at every f
         await expect(page.getByTestId('journey-map')).toHaveAttribute('data-state', 'ready');
         await page.waitForTimeout(500);
         const instruction = page.getByTestId('next-maneuver'); await expect(instruction).toContainText('Turn left');
+        await expect(instruction).toContainText('destination road');
+        await expect(instruction.locator('[aria-hidden="true"]')).toHaveText('↰');
+        const hud = (await page.getByTestId('road-navigation').boundingBox())!, map = (await page.getByTestId('journey-map').boundingBox())!;
+        expect(hud.height).toBeLessThanOrEqual(150); expect(hud.height / map.height).toBeLessThan(.38);
+        expect(hud.y).toBeGreaterThanOrEqual(map.y); expect(hud.x + hud.width).toBeLessThan(map.x + map.width);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByLabel('Navigation details', { exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Route steps' })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.getByTestId('travel-map-frame')).toHaveAttribute('data-expanded', String(expanded));
+        await expect(page.getByLabel('Navigation details', { exact: true })).toBeFocused();
         expect(await page.getByRole('button', { name: 'Pause Journey' }).evaluate(button => { const r = button.getBoundingClientRect(); return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button') === button; })).toBe(true);
         await page.screenshot({ path: info.outputPath(`live-${width}-${expanded ? 'expanded' : 'normal'}.png`) });
         if (expanded) { await page.keyboard.press('Tab'); expect(await page.getByTestId('travel-map-frame').evaluate(frame => frame.contains(document.activeElement))).toBe(true); await page.getByRole('button', { name: 'Collapse map' }).click(); }

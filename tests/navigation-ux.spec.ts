@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { NavigationPanel, navigationPresentation } from '../src/components/travel/navigation-panel';
+import { NavigationPanel, navigationPresentation, maneuverIcon } from '../src/components/travel/navigation-panel';
 import { emptyNavigation, parseRoadRoute, type NavigationState } from '../src/lib/travel/navigation';
 import { followNavigationCamera } from '../src/lib/travel/navigation-camera';
 import type { LocationFix } from '../src/lib/travel/location';
@@ -31,6 +31,14 @@ test('provider maneuver is shown only with a precise matched fix and current usa
   for (const position of [{ ...fix(), latitude: 20 }, { ...fix(), accuracy: 100 }, { ...fix(), timestamp: Date.now() - 20000 }]) expect(view({ fix: position }).maneuver).toBeNull();
   for (const navigation of [{ checkingRoute: true }, { routeStale: true }, { warning: 'Network unavailable.' }, { route: null }]) expect(view({}, navigation).maneuver).toBeNull();
   expect(view({ status: 'PAUSED' }).maneuver).toBeNull();
+});
+
+test('compact HUD keeps provider road text and does not derive turn direction from a street name', () => {
+  for (const [instruction, type, icon] of [['Turn right onto Left Street', 'turn', '↱'], ['Turn left onto Right Road', 'turn', '↰'], ['You have arrived on the left', 'arrive', '◎'], ['Merge onto the motorway', 'merge', '◇']]) {
+    const route = { ...road, steps: road.steps.map((step, index) => index === 1 ? { ...step, instruction, type } : step) };
+    expect(view({}, { route }).maneuver?.instruction).toBe(instruction);
+    expect(maneuverIcon(instruction, type)).toBe(icon);
+  }
 });
 
 test('camera deadband rejects jitter and weak GPS, handles wrapped heading and retains invalid-heading bearing', () => {

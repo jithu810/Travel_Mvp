@@ -39,8 +39,8 @@ export function PlaceSearch({ onAdd, latitude, longitude, disabled }: { onAdd: (
     ++generation.current;
     const added = onAdd({ name,latitude: lat,longitude: lng,mapboxId: result.properties?.mapbox_id || result.id });
     setQuery(''); setResults([]); setActive(-1); setSearched(false); setError(''); setLoading(false);
-    setNotice(added ? `Added ${name}. Search for your next place.` : `${name} is already in your stops.`);
-    input.current?.focus();
+    setNotice(added ? `Added ${name}. Add your photo and note in the active stop.` : `${name} is already in your stops.`);
+    if (!added) input.current?.focus();
   }
   return <div className="space-y-3">
     <label className="block text-sm font-medium">Search for a place<input ref={input} value={query} disabled={disabled || !token} maxLength={200} role="combobox" aria-autocomplete="list" aria-expanded={results.length > 0} aria-controls="place-options" aria-activedescendant={active >= 0 && results[active] ? `place-option-${active}` : undefined} autoComplete="off" placeholder="Search a beach, town or address…" onChange={event => {

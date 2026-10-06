@@ -63,15 +63,10 @@ summary:focus-visible {
 .travel-map-frame.is-expanded > section { border-radius: 0; }
 .travel-map-hud { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 8px; width: min(380px, calc(100% - 108px)); z-index: 5; }
 .travel-map-bottom { position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 8px; right: 8px; z-index: 5; }
-.navigation-compact > div { padding: 10px 12px; }
-.navigation-compact h2 { font-size: 16px; line-height: 1.3; margin-top: 0; }
-.navigation-compact dl { margin-top: 6px; gap: 16px; }
-.navigation-compact dd { font-size: 16px; margin-top: 0; }
-.navigation-compact [data-testid="next-maneuver"] { margin-top: 6px; padding-top: 6px; }
-.navigation-compact [data-testid="next-maneuver"] p:first-child { font-size: 16px; }
-.navigation-compact details { max-height: 20dvh; overflow-y: auto; }
-.navigation-compact summary { padding: 6px 0; }
-.navigation-compact [data-testid="navigation-status"] { margin-top: 4px; font-size: 12px; }
+.navigation-hud-details summary::-webkit-details-marker { display: none; }
+.navigation-hud-popover { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; max-height: 42dvh; overflow-y: auto; z-index: 8; }
+.travel-map-hud:has(.navigation-hud-details[open]) { z-index: 7; }
+.capture-stop { scroll-margin-top: 16px; scroll-margin-bottom: calc(12rem + env(safe-area-inset-bottom)); }
 .travel-map-frame button { touch-action: manipulation; }
 .travel-map-frame button[class*="absolute top-"] { left: auto; right: 8px; padding: 4px 8px; max-width: 92px; font-size: 11px; }
 .travel-map-frame button[class*="absolute top-3"] { top: 112px; }
@@ -82,5 +77,5 @@ summary:focus-visible {
   .travel-map-frame { height: max(350px, 90dvh); }
   .travel-map-hud { width: 300px; }
   .travel-map-bottom { left: auto; width: min(380px, calc(100% - 324px)); }
-  .navigation-compact details { display: none; }
+  .navigation-hud-popover { max-height: 52dvh; }
 }

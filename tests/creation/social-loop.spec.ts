@@ -61,7 +61,7 @@ test('two-user social loop, published owner edits, profiles, private saved state
 
   for(const name of ['Candolim Beach','Fontainhas','Fort Aguada']) await search(page,name);
 
-  await page.getByTestId('editor-stop').first().getByText('Details & photo',{ exact:true }).click();
+  if (!(await page.getByTestId('editor-stop').first().locator('details').evaluate(details => details.hasAttribute('open')))) await page.getByTestId('editor-stop').first().getByText('Details & photo',{ exact:true }).click();
 
   await page.getByTestId('editor-stop').first().getByLabel('Stop description').fill('Source sunset notes');
 
@@ -179,7 +179,7 @@ test('two-user social loop, published owner edits, profiles, private saved state
 
   await expect(b.getByTestId('editor-stop').getByRole('heading')).toHaveText(['1. Candolim Beach','2. Fontainhas','3. Fort Aguada']);
 
-  await b.getByTestId('editor-stop').first().getByText('Details & photo',{ exact:true }).click();
+  if (!(await b.getByTestId('editor-stop').first().locator('details').evaluate(details => details.hasAttribute('open')))) await b.getByTestId('editor-stop').first().getByText('Details & photo',{ exact:true }).click();
 
   await expect(b.getByTestId('editor-stop').first().getByLabel('Stop description')).toHaveValue('Source sunset notes');
 

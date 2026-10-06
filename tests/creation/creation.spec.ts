@@ -42,7 +42,8 @@ test('authenticated create/search/reorder/upload/draft refresh/publish/public di
     else if (place.name === 'Varkala Cliff') await suggestion.getByTestId('add-place').click();
     else await suggestion.click();
     await expect(page.getByRole('combobox',{ name: 'Search for a place' })).toHaveValue('');
-    await expect(page.getByRole('combobox',{ name: 'Search for a place' })).toBeFocused();
+    await expect(page.getByTestId('editor-stop').last().getByLabel('Stop name')).toBeFocused();
+    await expect(page.getByTestId('editor-stop').last().locator('details')).toHaveAttribute('open', '');
   }
   await page.getByRole('combobox',{ name: 'Search for a place' }).fill('Varkala Cliff');
   await page.getByRole('option',{ name: 'Varkala Cliff, Kerala, India' }).getByTestId('add-place').click();
@@ -53,7 +54,7 @@ test('authenticated create/search/reorder/upload/draft refresh/publish/public di
   await expect(page.getByTestId('route-marker')).toHaveCount(3);
   await expect(page.getByLabel('Latitude',{ exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Longitude',{ exact: true })).toHaveCount(0);
-  await page.getByTestId('editor-stop').first().getByText('Details & photo',{ exact: true }).click();
+  if (!(await page.getByTestId('editor-stop').first().locator('details').evaluate(details => details.hasAttribute('open')))) await page.getByTestId('editor-stop').first().getByText('Details & photo',{ exact: true }).click();
   await page.getByTestId('editor-stop').first().getByLabel('Stop description').fill('Go around sunset for the cliff view.');
   await page.getByTestId('editor-stop').first().getByRole('combobox',{ name: 'Day',exact: true }).selectOption('1');
   await page.getByTestId('editor-stop').first().getByLabel('Rating (optional)').fill('4.5');
