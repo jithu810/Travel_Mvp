@@ -28,7 +28,7 @@ function publicImage(value: string | null, fallback: string) {
 export function normalize(row: PublicRow): Journey {
   return {
     id: row.id, title: row.title, description: row.description || "Explore the stops along this journey.",
-    destinationSlug: row.destination_slug, travelerType: row.traveler_type,
+    destinationSlug: row.destination_slug, destinationName: row.destination_name, travelerType: row.traveler_type,
     durationDays: row.duration_days, coverImage: publicImage(row.cover_image_path, getDestination(row.destination_slug)?.image || "/images/goa.jpg"),
     creatorId: row.creator_id, creatorUsername: row.creator_username, status: row.status === 'draft' ? 'draft' : 'published', saved: row.saved,
     creatorName: row.creator_name || "Traveler", creatorAvatar: row.creator_avatar ? publicImage(row.creator_avatar, "") || null : null,

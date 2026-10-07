@@ -8,7 +8,7 @@ export function parseTravelerFilter(value: unknown): TravelerFilter {
 
 export type Journey = {
   creatorId?: string | null; creatorUsername?: string | null; status?: 'draft' | 'published'; saved?: boolean;
-  id: string; title: string; description: string; destinationSlug: string;
+  id: string; title: string; description: string; destinationSlug: string; destinationName?: string | null;
   travelerType: TravelerType; durationDays: number; coverImage: string;
   creatorName: string; creatorAvatar: string | null; likes: number; isDemo: boolean;
   stops: { id: string; name: string; description: string; position: number }[];

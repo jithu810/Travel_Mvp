@@ -34,17 +34,21 @@ export default async function PublicProfilePage({ params,searchParams }: { param
       mainEntity: { '@type': 'Person', name: profile.display_name || profile.username, alternateName: `@${profile.username}`, ...(profile.bio ? { description: profile.bio } : {}) },
     }} />}
     {owner && (query.updated || query.deleted) && <p role="status" className="text-sm text-brand">{query.deleted ? 'Journey deleted. Remixed copies are unaffected.' : 'Profile saved.'}</p>}
-    <section className="space-y-4 rounded-3xl border border-stone-200 bg-white p-6">
-      <CreatorAvatar name={profile.display_name || profile.username} src={profile.avatar_path}/>
-      <h1 className="text-3xl font-semibold">{profile.display_name || profile.username}</h1>
-      <p className="text-sm text-stone-500">@{profile.username} · {profile.published_count} published {profile.published_count === 1 ? 'journey' : 'journeys'}</p>
+    <section aria-label="Traveler profile" className="flex flex-col items-start gap-4 border-b border-stone-200 pb-6 sm:flex-row sm:gap-6">
+      <CreatorAvatar name={profile.display_name || profile.username} src={profile.avatar_path} size="profile"/>
+      <div className="min-w-0 space-y-3 break-words">
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{profile.display_name || profile.username}</h1>
+      <p className="text-sm text-stone-500">@{profile.username}</p>
       {profile.bio && <p className="max-w-2xl whitespace-pre-wrap break-words text-stone-600">{profile.bio}</p>}
+      <p className="text-sm font-semibold text-brand">{profile.published_count} public {profile.published_count === 1 ? 'journey' : 'journeys'}</p>
       {owner && <Link href="/profile/edit" className="inline-flex min-h-11 items-center text-sm font-semibold underline">Edit Profile</Link>}
+      </div>
     </section>
-    <nav aria-label="Profile journeys" className="flex gap-3">
+    <h2 className="break-words text-xl font-semibold">{drafts ? "Your drafts" : `${profile.display_name || profile.username}’s Journeys`}</h2>
+    {owner && <nav aria-label="Profile journeys" className="flex gap-3">
       <Link aria-current={!drafts ? 'page' : undefined} href={`/profile/${profile.username}`} className={`min-h-11 rounded-full px-5 py-3 text-sm ${!drafts ? 'bg-brand text-white' : 'bg-stone-100'}`}>Published</Link>
       {owner && <Link aria-current={drafts ? 'page' : undefined} href={`/profile/${profile.username}?tab=drafts`} className={`min-h-11 rounded-full px-5 py-3 text-sm ${drafts ? 'bg-brand text-white' : 'bg-stone-100'}`}>Drafts</Link>}
-    </nav>
-    {journeys.length ? <JourneyGrid journeys={journeys}/> : <EmptyState title={drafts ? 'No drafts yet.' : 'No published journeys yet.'}><p>{owner ? 'Your journeys will appear here. Create your first journey and share your route with other travelers.' : 'This traveler hasn’t shared a journey yet. Explore other destinations and routes in the meantime.'}</p><Link href={owner ? '/create' : '/explore'} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brand px-5 font-semibold text-white">{owner ? 'Create Journey' : 'Explore Journeys'}</Link></EmptyState>}
+    </nav>}
+    {journeys.length ? <JourneyGrid journeys={journeys}/> : <EmptyState title={drafts ? 'No drafts yet.' : 'No public journeys yet.'}><p>{owner ? 'Your journeys will appear here. Create your first journey and share your route with other travelers.' : 'This traveler hasn’t shared a journey yet. Explore other destinations and routes in the meantime.'}</p><Link href={owner ? '/create' : '/explore'} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brand px-5 font-semibold text-white">{owner ? 'Create Journey' : 'Explore Journeys'}</Link></EmptyState>}
   </div>;
 }

@@ -28,6 +28,7 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
   const source = journey.copiedFrom ? await getJourneyDetail(journey.copiedFrom).catch(() => null) : null;
   const owner = !!journey.viewerId && journey.creatorId === journey.viewerId;
   const destination = getDestination(journey.destinationSlug);
+  const destinationName = journey.destinationName || destination?.name;
   const publicRow = journey.status === 'published' ? await publicJourneySeo(id).catch(() => null) : null;
   return <article className="space-y-8">
     {publicRow && !publicRow.is_demo && siteUrl('/') && <JsonLd data={{ '@context': 'https://schema.org', '@type': 'CreativeWork',
@@ -38,27 +39,33 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
       ...(publicRow.traveler_type ? { audience: { '@type': 'Audience', audienceType: publicRow.traveler_type } } : {}),
     }} />}
     <Link href={destination ? `/destination/${journey.destinationSlug}` : "/explore"} className="inline-flex min-h-11 items-center text-sm font-medium text-stone-500">← Explore {destination?.name || "journeys"}</Link>
-    <JourneyRoute stops={journey.stops} travelHref={journey.status === 'published' ? `/travel/${encodeURIComponent(id)}` : undefined} controls={<JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>}>
-    <div className="grid items-start gap-8 md:grid-cols-[1.4fr_0.6fr]">
-    <header className="max-w-3xl space-y-5">
-      <div className="flex flex-wrap gap-2">{destination && <Link href={`/destination/${journey.destinationSlug}`} className="rounded-full bg-[#e7eedf] px-3 py-2 text-xs font-semibold text-brand">{destination.name}</Link>}{journey.travelerType && <span className="rounded-full bg-stone-100 px-3 py-2 text-xs capitalize">{journey.travelerType}</span>}{journey.isDemo && <span className="rounded-full bg-amber-50 px-3 py-2 text-xs text-amber-800">Demo journey</span>}{journey.status === "draft" && <span className="rounded-full bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Private draft · Only you</span>}</div>
-      <h1 className="text-3xl leading-tight font-semibold tracking-tight sm:text-5xl">{journey.title}</h1>
-      <p className="text-sm leading-7 text-stone-600">{journey.stops.map(stop => stop.name).join(" → ")}</p>
-      <p className="text-sm text-stone-500">{journey.durationDays} {journey.durationDays === 1 ? "day" : "days"} · {journey.stops.length} stops</p>
-      {journey.creatorUsername ? <Link href={`/profile/${encodeURIComponent(journey.creatorUsername)}`} className="inline-flex min-h-12 items-center gap-3"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><span><span className="block text-sm font-semibold">{journey.creatorName}</span><span className="block text-xs text-stone-500">@{journey.creatorUsername}</span></span></Link> : <div className="inline-flex min-h-12 items-center gap-3"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><span className="text-sm font-semibold">{journey.creatorName}</span></div>}
-
+    <header className="max-w-3xl space-y-4 break-words">
+      {journey.creatorUsername ? <Link href={`/profile/${encodeURIComponent(journey.creatorUsername)}`} className="inline-flex min-h-12 max-w-full items-center gap-3"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><span className="min-w-0"><span className="block text-sm font-semibold">{journey.creatorName}</span><span className="block text-xs text-stone-500">@{journey.creatorUsername}</span></span></Link> : <div className="inline-flex min-h-12 items-center gap-3"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><span className="text-sm font-semibold">{journey.creatorName}</span></div>}
+      <h1 className="text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">{journey.title}</h1>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-stone-600">
+        {destinationName && (destination ? <Link href={`/destination/${journey.destinationSlug}`} className="inline-flex min-h-11 items-center font-medium text-brand">{destinationName} · {destination.region}</Link> : <span>{destinationName}</span>)}
+        {journey.travelerType && <span className="capitalize">{journey.travelerType}</span>}
+        {journey.isDemo && <span className="text-xs text-amber-800">Demo journey</span>}
+        {journey.status === "draft" && <span className="text-xs font-semibold text-amber-800">Private draft · Only you</span>}
+      </div>
     </header>
-    <div className="relative aspect-[16/10] overflow-hidden rounded-3xl bg-stone-200 md:aspect-[4/5]"><TravelImage src={journey.coverImage} alt={`${destination?.name || "Travel"} journey cover`} sizes="(max-width: 768px) 100vw, 360px" priority/></div>
-    </div>
+
+    <JourneyRoute stops={journey.stops} travelHref={journey.status === "published" ? `/travel/${encodeURIComponent(id)}` : undefined} controls={<JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>}>
+    <section aria-label="Journey summary" className="mx-auto grid max-w-4xl items-start gap-5 sm:grid-cols-[1fr_240px]">
+      <div className="min-w-0 space-y-4">
+        <p className="text-sm font-semibold text-brand">{journey.durationDays > 0 && <>{journey.durationDays} {journey.durationDays === 1 ? "day" : "days"} · </>}{journey.stops.length} {journey.stops.length === 1 ? "stop" : "stops"}</p>
+        {journey.description && <p className="whitespace-pre-line break-words text-base leading-8 text-stone-600 sm:text-lg">{journey.description}</p>}
+      </div>
+      <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-stone-200"><TravelImage src={journey.coverImage} alt={`${destinationName || "Travel"} journey cover`} sizes="(max-width: 640px) 100vw, 240px" priority/></div>
+    </section>
     {owner && <OwnerActions id={id}/>}
     {journey.status === "draft" && <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">This journey is private. It is not visible in public discovery. <Link href={`/create?draft=${id}`} className="font-semibold underline">Continue editing your draft →</Link></p>}
     {journey.copiedFrom && <p className="text-sm text-stone-500">{source ? <>Remixed from <Link href={`/journey/${source.id}`} className="underline">{source.title}</Link></> : 'Remixed from a journey that is no longer publicly available.'}</p>}
     {journey.isDemo && <p className="rounded-2xl bg-[#e7eedf] p-4 text-sm leading-6">This is a sample journey created for the Journey demo, not a real user post. Stops and approximate map positions illustrate a route; they are not verified travel instructions.</p>}
-    <p className="max-w-3xl text-lg leading-8 text-stone-600">{journey.description || "No journey description has been added yet."}</p>
     </JourneyRoute>
     <section aria-label="About the creator" className="border-t border-stone-200 pt-8">
       <p className="text-xs font-semibold tracking-[0.18em] text-brand uppercase">About the creator</p>
-      <div className="mt-5 flex flex-wrap items-center gap-4"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><div><h2 className="text-xl font-semibold">{journey.creatorName}</h2>{journey.creatorUsername && <p className="mt-1 text-sm text-stone-500">@{journey.creatorUsername}</p>}</div>{journey.creatorUsername && <Link href={`/profile/${encodeURIComponent(journey.creatorUsername)}`} className="inline-flex min-h-11 items-center rounded-full border border-stone-200 bg-white px-5 text-sm font-semibold text-brand">View Profile</Link>}</div>
+      <div className="mt-5 flex flex-wrap items-center gap-4"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><div className="min-w-0 max-w-full break-words"><h2 className="text-xl font-semibold">{journey.creatorName}</h2>{journey.creatorUsername && <p className="mt-1 text-sm text-stone-500">@{journey.creatorUsername}</p>}</div>{journey.creatorUsername && <Link href={`/profile/${encodeURIComponent(journey.creatorUsername)}`} className="inline-flex min-h-11 items-center rounded-full border border-stone-200 bg-white px-5 text-sm font-semibold text-brand">View Profile</Link>}</div>
     </section>
     <Link href={destination ? `/destination/${journey.destinationSlug}` : "/explore"} className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">More journeys {destination ? `through ${destination.name}` : "to explore"} ↗</Link>
   </article>;

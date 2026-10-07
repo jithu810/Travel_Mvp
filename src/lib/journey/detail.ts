@@ -21,7 +21,7 @@ export function normalizeDetail(row: Record<string, unknown>, viewerId: string |
   return {
     id: String(row.id), title: typeof row.title === "string" ? row.title : "Untitled journey",
     description: typeof row.description === "string" ? row.description : "",
-    destinationSlug: slug, travelerType: row.traveler_type as JourneyDetail["travelerType"],
+    destinationSlug: slug, destinationName: typeof row.destination_name === "string" ? row.destination_name : null, travelerType: row.traveler_type as JourneyDetail["travelerType"],
     durationDays: typeof row.duration_days === "number" ? row.duration_days : 1,
     coverImage: safeImage(row.cover_image_path, getDestination(slug)?.image || "/images/goa.jpg")!,
     creatorId: typeof row.creator_id === "string" ? row.creator_id : null,

@@ -71,7 +71,7 @@ test('contextual login, narrow navigation, empty collections and sticky creation
   await page.getByRole('link', { name: 'Explore Journeys', exact: true }).click();
   await expect(page).toHaveURL('/explore');
   await page.goto('/profile/new_creator');
-  await expect(page.getByRole('heading', { name: 'No published journeys yet.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No public journeys yet.' })).toBeVisible();
   await page.locator('main').getByRole('link', { name: 'Create Journey', exact: true }).click();
   await expect(page).toHaveURL('/create');
   const publish = page.getByRole('button', { name: 'Publish Journey', exact: true });
