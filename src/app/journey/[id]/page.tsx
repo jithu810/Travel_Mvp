@@ -9,6 +9,8 @@ import { TravelImage } from "@/components/ui/travel-image";
 import { JourneyRoute } from "@/components/journey/journey-route";
 import { JourneyActions } from "@/components/journey/journey-actions";
 import { CreatorAvatar } from "@/components/journey/creator-avatar";
+import { JourneySnapshot } from '@/components/journey/journey-snapshot';
+import { journeyIntelligence } from '@/lib/journey/journey-intelligence';
 import { publicJourneySeo } from '@/lib/seo/public-data';
 import { publicMetadata, privateMetadata, plainDescription, seoImage } from '@/lib/seo/metadata';
 import { siteUrl } from '@/lib/seo/site';
@@ -55,7 +57,7 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
     <JourneyRoute stops={journey.stops} controls={<JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>}>
     <section aria-label="Journey summary" className="mx-auto grid max-w-4xl items-start gap-5 sm:grid-cols-[1fr_240px]">
       <div className="min-w-0 space-y-4">
-        <p className="text-sm font-semibold text-brand">{journey.durationDays > 0 && <>{journey.durationDays} {journey.durationDays === 1 ? "day" : "days"} · </>}{journey.stops.length} {journey.stops.length === 1 ? "stop" : "stops"}</p>
+        <JourneySnapshot intelligence={journeyIntelligence(journey)}/>
         {journey.description && <p className="whitespace-pre-line break-words text-base leading-8 text-stone-600 sm:text-lg">{journey.description}</p>}
       </div>
       <div className="relative aspect-[16/10] overflow-hidden rounded-2xl bg-stone-200"><TravelImage src={journey.coverImage} alt={`${destinationName || "Travel"} journey cover`} sizes="(max-width: 640px) 100vw, 240px" priority/></div>
