@@ -50,7 +50,7 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
       </div>
     </header>
 
-    <JourneyRoute stops={journey.stops} travelHref={journey.status === "published" ? `/travel/${encodeURIComponent(id)}` : undefined} controls={<JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>}>
+    <JourneyRoute stops={journey.stops} controls={<JourneyActions key={`${id}:${journey.viewerId || "anonymous"}`} id={id} title={journey.title} isPublic={journey.status === "published"} viewerId={journey.viewerId} initialLikes={journey.likes} initialLiked={journey.liked} initialSaved={journey.saved}/>}>
     <section aria-label="Journey summary" className="mx-auto grid max-w-4xl items-start gap-5 sm:grid-cols-[1fr_240px]">
       <div className="min-w-0 space-y-4">
         <p className="text-sm font-semibold text-brand">{journey.durationDays > 0 && <>{journey.durationDays} {journey.durationDays === 1 ? "day" : "days"} · </>}{journey.stops.length} {journey.stops.length === 1 ? "stop" : "stops"}</p>

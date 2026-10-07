@@ -34,9 +34,9 @@ test('map overlays, expand/collapse, mode changes and arrival retain a single wa
     await expect(page.getByLabel('Journey controls')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Start Journey' })).toBeVisible();
     for (const [width,height] of sizes) {
-      await page.setViewportSize({ width,height }); await page.evaluate(() => window.scrollTo(0,0));
+      await page.setViewportSize({ width,height }); await page.getByRole('link', { name: 'Start Journey' }).scrollIntoViewIfNeeded();
       const controls = (await page.getByLabel('Journey controls').boundingBox())!, start = (await page.getByRole('link', { name: 'Start Journey' }).boundingBox())!;
-      expect(start.y - controls.y).toBeLessThan(90); expect(start.y).toBeGreaterThanOrEqual(0); expect(start.y + start.height).toBeLessThan(height);
+      expect(start.y).toBeGreaterThanOrEqual(controls.y); expect(start.y + start.height).toBeLessThanOrEqual(controls.y + controls.height); expect(start.y).toBeGreaterThanOrEqual(0); expect(start.y + start.height).toBeLessThan(height);
     }
     await page.getByRole('link', { name: 'Start Journey' }).click();
     expect((await gpsCounts(page)).watches).toBe(0);

@@ -1,13 +1,12 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import Link from 'next/link';
 import { JourneyMap } from "@/components/map/journey-map";
 import { StopPhoto } from './stop-photo';
 import { orderedStops } from "@/lib/journey/map-data";
 import type { JourneyStop } from "@/lib/journey/types";
 
-export function JourneyRoute({ stops, children, controls, travelHref }: { stops: JourneyStop[]; children?: ReactNode; controls?: ReactNode; travelHref?: string }) {
+export function JourneyRoute({ stops, children, controls }: { stops: JourneyStop[]; children?: ReactNode; controls?: ReactNode }) {
   const [selected, setSelected] = useState<string | null>(null);
   const sorted = useMemo(() => orderedStops(stops), [stops]);
   function selectFromMap(id: string) {
@@ -36,9 +35,6 @@ export function JourneyRoute({ stops, children, controls, travelHref }: { stops:
         </div>
       </li>)}</ol>
     </section>
-    {travelHref && <section aria-label="Travel information" className="border-t border-stone-200 pt-6">
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-xl text-sm leading-6 text-stone-600">Follow the creator’s stops in Travel Mode. GPS can detect arrivals after you start; manual completion remains available. Progress stays in this browser tab.</p><Link href={travelHref} className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">Preview Travel Mode →</Link></div>
-    </section>}
     <section aria-label="Journey actions" className="border-t border-stone-200 pt-6">{controls}</section>
   </div>;
 }
