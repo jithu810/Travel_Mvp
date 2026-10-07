@@ -32,15 +32,15 @@ test('public discovery ranks likes, sorts publication, searches stories and keep
     await expect(page).toHaveURL(/sort=popular.*traveler=friends/);
     await expect(page.getByTestId('journey-card')).toHaveCount(1);
     await expect(page.getByTestId('journey-card')).toContainText(titles[1]);
-    await page.reload(); await expect(page.getByLabel('Find a journey or traveler')).toHaveValue(prefix);
+    await page.reload(); await expect(page.getByLabel('Search journeys, places or travelers')).toHaveValue(prefix);
     await page.getByRole('navigation', { name: 'Traveler type filters' }).getByRole('link', { name: 'All', exact: true }).click();
     await expect(page.getByRole('navigation', { name: 'Traveler type filters' }).getByRole('link', { name: 'All', exact: true })).toHaveAttribute('aria-current', 'page');
-    await page.getByLabel('Find a journey or traveler').fill('Beach ' + titles[0]);
-    await page.getByRole('button', { name: 'Find stories' }).click();
+    await page.getByLabel('Search journeys, places or travelers').fill('Beach ' + titles[0]);
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByTestId('journey-card')).toHaveCount(1);
-    await page.getByLabel('Find a journey or traveler').fill('creator_a'); await page.getByRole('button', { name: 'Find stories' }).click();
+    await page.getByLabel('Search journeys, places or travelers').fill('creator_a'); await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByRole('link', { name: `Open journey: ${titles[0]}` })).toBeVisible();
-    await page.getByLabel('Find a journey or traveler').fill('Unfindable ' + prefix); await page.getByRole('button', { name: 'Find stories' }).click();
+    await page.getByLabel('Search journeys, places or travelers').fill('Unfindable ' + prefix); await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'No journeys found.' })).toBeVisible();
     await expect(page.getByTestId('journey-card')).toHaveCount(0);
     await page.goto(`/explore?q=${encodeURIComponent(titles[0])}&traveler=couple&sort=popular`);
@@ -93,8 +93,10 @@ test('Home and Explore are usable at all six discovery viewports', async ({ page
       await page.screenshot({ path: info.outputPath(`home-${width}.png`), fullPage: true });
       await page.goto(`/explore?q=${encodeURIComponent(title)}`);
       await expect(page.getByTestId('journey-card')).toHaveCount(1);
-      for (const name of ['Find stories']) { const box = await page.getByRole('button', { name }).boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44); }
-      await page.getByLabel('Find a journey or traveler').focus(); await expect(page.getByLabel('Find a journey or traveler')).toBeFocused();
+      await expect(page.locator('main input[type=search]')).toHaveCount(1);
+      await expect(page.getByRole('search')).toHaveCount(1);
+      for (const name of ['Search']) { const box = await page.getByRole('button', { name, exact: true }).boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44); }
+      await page.getByLabel('Search journeys, places or travelers').focus(); await expect(page.getByLabel('Search journeys, places or travelers')).toBeFocused();
       await page.getByRole('region', { name: 'Destination context', exact: true }).scrollIntoViewIfNeeded();
       await page.getByTestId('explore-map').scrollIntoViewIfNeeded();
       await expect(page.getByTestId('explore-map')).toHaveAttribute('data-state', 'ready', { timeout: 30000 });

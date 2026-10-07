@@ -52,7 +52,7 @@ test('worldwide suggestions, keyboard/touch selection, empty destination and pre
   }
   const calls = await mockSearch(page);
   await page.goto('/');
-  const input = page.getByRole('combobox', { name: 'Search destinations' });
+  const input = page.getByRole('combobox');
   for (const place of places) {
     await input.fill(place.name);
     await expect(page.getByRole('option', { name: place.label, exact: true })).toBeVisible();
@@ -81,6 +81,7 @@ test('worldwide suggestions, keyboard/touch selection, empty destination and pre
   await expect(page.getByText('No journeys here yet.', { exact: true })).toBeVisible();
   await input.fill('Goa');
   await expect(page.getByRole('option', { name: 'Goa, India', exact: true })).toBeVisible();
+  await input.press('ArrowDown');
   await input.press('Enter');
   await expect(page).toHaveURL(/destination=Goa/);
   await expect(page.getByRole('link', { name: `Open journey: ${titles[0]}` })).toBeVisible();

@@ -31,8 +31,8 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
   const invalid = params.destination !== undefined && !selected;
   const result = invalid ? { journeys: [], source: 'supabase' as const, loaded: false, total: 0, page: 1, pages: 1 } : await getExploreJourneys(selected, traveler, { search, sort, page });
   return <div className="space-y-8 sm:space-y-10">
-    <div className="max-w-2xl"><p className="text-xs font-semibold tracking-[0.18em] text-brand uppercase">Explore journeys</p><h1 className="mt-3 text-3xl leading-tight font-semibold tracking-tight sm:text-5xl">A world of journeys.</h1><p className="mt-3 text-sm leading-6 text-stone-600 sm:text-base">Find your next place through the stories of travelers who went there.</p><div className="mt-6"><DestinationSearch filters={filters} /></div></div>
-    <div className="max-w-2xl space-y-2"><DiscoveryControls path={path} search={search} sort={sort} traveler={traveler} />
+    <div className="max-w-2xl"><p className="text-xs font-semibold tracking-[0.18em] text-brand uppercase">Explore journeys</p><h1 className="mt-3 text-3xl leading-tight font-semibold tracking-tight sm:text-5xl">A world of journeys.</h1><p className="mt-3 text-sm leading-6 text-stone-600 sm:text-base">Find your next place through the stories of travelers who went there.</p><div className="mt-6"><DestinationSearch key={path} filters={filters} journeySearch={{ path, value: search }} /></div></div>
+    <div className="max-w-2xl space-y-2"><DiscoveryControls path={path} sort={sort} traveler={traveler} />
       <p className="text-xs leading-5 text-stone-500">Browse and search the latest 100 public journeys in this collection. {sort === 'popular' ? 'Popular ranks these journeys by likes; ties show newer stories first.' : 'Newest published stories appear first.'}</p>
     </div>
     {invalid && <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">That destination link is incomplete. Search and select a destination again.</p>}

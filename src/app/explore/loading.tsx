@@ -7,7 +7,6 @@ export default function ExploreLoading() {
       <div aria-hidden="true" className="h-16 max-w-xl rounded-2xl bg-white" />
     </div>
     <div aria-hidden="true" className="max-w-2xl space-y-4">
-      <div className="h-[76px] rounded-xl bg-white" />
       <div className="h-11 max-w-sm rounded-full bg-stone-200" />
       <div className="h-24 max-w-lg rounded-2xl bg-stone-100 sm:h-11" />
       <div className="h-10 max-w-xl rounded-xl bg-stone-100 sm:h-5" />
