@@ -8,7 +8,7 @@ import type { SelectedDestination } from '@/lib/discovery/selected-destination';
 const Map = dynamic(() => import('./explore-mapbox').then(module => module.ExploreMapbox), {
   ssr: false, loading: () => <div role="status" className="flex h-[340px] items-center justify-center rounded-3xl bg-[#e7eedf] text-brand sm:h-[440px]">Opening the world…</div>,
 });
-export function ExploreMap(props: { journeys: ExploreJourney[]; selected: SelectedDestination | null }) {
+export function ExploreMap(props: { journeys: ExploreJourney[]; selected: SelectedDestination | null; collectionHref?: string }) {
   const container = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {

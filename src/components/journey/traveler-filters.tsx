@@ -4,6 +4,7 @@ import { travelerTypes, type TravelerFilter } from "@/lib/discovery/types";
 export function TravelerFilters({ path, selected }: { path: string; selected: TravelerFilter }) {
   function href(type: TravelerFilter) {
     const url = new URL(path, 'http://journey.internal');
+    url.searchParams.delete('page');
     if (type === 'all') url.searchParams.delete('traveler');
     else url.searchParams.set('traveler', type);
     return `${url.pathname}${url.search}`;

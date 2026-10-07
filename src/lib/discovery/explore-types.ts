@@ -7,4 +7,4 @@ export type ExploreJourney = Journey & {
   mapStops: ExploreStop[];
   matchingStops: string[];
 };
-export type ExploreResult = { journeys: ExploreJourney[]; source: 'supabase'; loaded: boolean; error?: string };
+export type ExploreResult = { journeys: ExploreJourney[]; source: 'supabase'; loaded: boolean; total?: number; page?: number; pages?: number; error?: string };

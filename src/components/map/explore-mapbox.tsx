@@ -9,7 +9,7 @@ import type { SelectedDestination } from '@/lib/discovery/selected-destination';
 import type { Map, Marker } from 'mapbox-gl';
 import { groupExploreLocations } from '@/lib/discovery/explore-geography';
 
-export function ExploreMapbox({ journeys, selected }: { journeys: ExploreJourney[]; selected: SelectedDestination | null }) {
+export function ExploreMapbox({ journeys, selected, collectionHref = '#published-journeys' }: { journeys: ExploreJourney[]; selected: SelectedDestination | null; collectionHref?: string }) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<Map | null>(null);
   const token = getMapboxToken();
@@ -97,7 +97,7 @@ export function ExploreMapbox({ journeys, selected }: { journeys: ExploreJourney
       <div className="grid max-h-80 gap-3 overflow-y-auto sm:grid-cols-2">
         {chosen.journeys.slice(0, 3).map(journey => <article key={journey.id} className="flex gap-4 rounded-2xl border border-stone-200 p-3"><div className="relative h-24 w-20 shrink-0 overflow-hidden rounded-xl"><TravelImage src={journey.coverImage} alt={`${journey.destinationName} journey cover`} sizes="80px" /></div><div className="min-w-0"><p className="text-xs capitalize text-brand">{journey.destinationName} · {journey.travelerType}</p><h3 className="mt-1 font-semibold">{journey.title}</h3><p className="mt-1 text-xs text-stone-600">By {journey.creatorName} · {journey.durationDays} {journey.durationDays === 1 ? 'day' : 'days'} · {journey.likes} likes</p><Link href={`/journey/${journey.id}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-brand underline">View Journey<span className="sr-only">: {journey.title}</span></Link></div></article>)}
       </div>
-      <Link href="#published-journeys" onClick={() => { close(); requestAnimationFrame(() => document.getElementById('published-journeys')?.focus({ preventScroll: true })); }} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline">View all journeys below</Link>
+      <Link href={collectionHref} onClick={() => { close(); if (collectionHref === '#published-journeys') requestAnimationFrame(() => document.getElementById('published-journeys')?.focus({ preventScroll: true })); }} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-brand underline">{collectionHref === '#published-journeys' ? 'View all journeys below' : 'Explore all journeys'}</Link>
     </div>}
     <p className="border-t border-stone-200 bg-white/70 px-4 py-3 text-xs leading-5 text-stone-600">{groups.length ? 'Tap a marker to explore journeys. Zoom in to see more places.' : 'Search a destination to take a closer look. Journeys appear on the map when stored coordinates are available.'}</p>
   </section>;

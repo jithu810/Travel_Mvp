@@ -19,14 +19,14 @@ test('homepage shows published data and shell preserves anonymous and authentica
   const title = (await published.json())[0].title as string;
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Where will your');
-  await expect(page.getByRole('link', { name: `Open journey: ${title}` })).toBeVisible();
+  await expect(page.getByRole('link', { name: `Open journey: ${title}` }).first()).toBeVisible();
   await expect(page.locator('main').getByText('Demo journey')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Login / Profile', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: 'Search destinations' }).fill('Goa');
   await page.getByRole('heading', { level: 1 }).click();
   await expect(page.getByRole('listbox')).toHaveCount(0);
   await page.getByRole('heading', { name: 'See the bigger picture.' }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole('region', { name: 'Southern India destination map preview' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Explore journey map' })).toBeVisible();
   await page.waitForFunction(() => Array.from(document.querySelectorAll('main img')).filter(image => image.getBoundingClientRect().width > 0).every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect.poll(async () => {

@@ -6,7 +6,7 @@ import { getMapboxToken } from '@/lib/env';
 import { searchMapboxPlaces } from '@/lib/mapbox/geocoding';
 import { destinationFromFeature, destinationHref, destinationSearchTypes, type SelectedDestination } from '@/lib/discovery/selected-destination';
 
-export function DestinationSearch() {
+export function DestinationSearch({ filters = {} }: { filters?: Record<string, string> }) {
   const router = useRouter();
   const id = useId();
   const form = useRef<HTMLFormElement>(null);
@@ -78,7 +78,9 @@ export function DestinationSearch() {
 
   function select(place: SelectedDestination) {
     ++generation.current; setOpen(false); setLoading(false);
-    router.push(destinationHref(place));
+    const url = new URL(destinationHref(place), 'http://journey.internal');
+    for (const [key, value] of Object.entries(filters)) if (value && ['q', 'sort', 'traveler'].includes(key)) url.searchParams.set(key, value);
+    router.push(url.pathname + url.search);
   }
 
   return <form ref={form} role="search" className="relative z-20 w-full max-w-xl" onSubmit={event => {

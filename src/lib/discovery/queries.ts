@@ -9,6 +9,7 @@ import { resolveMedia } from '@/lib/journey/media';
 import { matchesDestination, type SelectedDestination } from './selected-destination';
 import type { ExploreResult } from './explore-types';
 import { matchesStop, storedCoordinates } from './explore-geography';
+import { browseJourneys, type DiscoveryOptions } from './browse';
 
 export type PublicRow = {
   id: string; title: string; description: string | null; destination_slug: string; destination_name?: string | null;
@@ -82,7 +83,7 @@ export async function getJourneys(destination?: string, traveler: TravelerFilter
 
 // Public-only parent filtering and anonymous RLS also protect embedded stops.
 // Fetch stops with their journeys, never once per stop or once per journey.
-export async function getExploreJourneys(selected: SelectedDestination | null, traveler: TravelerFilter): Promise<ExploreResult> {
+export async function getExploreJourneys(selected: SelectedDestination | null, traveler: TravelerFilter, options: DiscoveryOptions = {}): Promise<ExploreResult> {
   const empty: ExploreResult = { journeys: [], source: 'supabase', loaded: false };
   const client = publicClient();
   if (!client) return empty;
@@ -96,7 +97,9 @@ export async function getExploreJourneys(selected: SelectedDestination | null, t
     };
     type Row = NonNullable<Awaited<ReturnType<typeof query>>['data']>[number];
     const matches: Row[] = [];
-    for (let offset = 0; matches.length < 100; offset += 100) {
+    // Bound stop-aware geography scanning as well as the 100-result collection.
+    // This preserves older stop matches without walking the entire database.
+    for (let offset = 0; matches.length < 100 && offset < 500; offset += 100) {
       const { data, error } = await query().range(offset, offset + 99);
       if (error) throw error;
       for (const row of data) if (row.destination_slug && (!selected || matchesDestination(selected, row) || row.journey_stops.some(stop => matchesStop(selected, stop)))) matches.push(row);
@@ -104,8 +107,11 @@ export async function getExploreJourneys(selected: SelectedDestination | null, t
     }
     const rows = matches.slice(0, 100);
     if (!rows.length) return { ...empty, loaded: true };
-    const slugs = [...new Set(rows.map(row => row.destination_slug!))];
-    const cards = new Map<string, Journey>();
+    // The public projection supplies safe creator identity and aggregate likes.
+    // One shared batch covers the normal browse window; never query profiles,
+    // saves or travel sessions from discovery.
+    const cards = new Map((await fetchPublished(undefined, traveler) || []).filter(j => !j.isDemo).map(j => [j.id, j]));
+    const slugs = [...new Set(rows.filter(row => !cards.has(row.id)).map(row => row.destination_slug!))];
     for (let index = 0; index < slugs.length; index += 5) {
       const batches = await Promise.all(slugs.slice(index, index + 5).map(slug => fetchPublished(slug, traveler)));
       for (const journey of batches.flatMap(batch => batch || [])) if (!journey.isDemo) cards.set(journey.id, journey);
@@ -117,7 +123,7 @@ export async function getExploreJourneys(selected: SelectedDestination | null, t
       const batches = await Promise.all(missing.slice(index, index + 5).map(row => fetchPublished(undefined, traveler, row.id)));
       for (const journey of batches.flatMap(batch => batch || [])) if (!journey.isDemo) cards.set(journey.id, journey);
     }
-    return { ...empty, loaded: true, journeys: rows.flatMap(row => {
+    const journeys = rows.flatMap(row => {
       const journey = cards.get(row.id);
       if (!journey) return [];
       const stops = [...row.journey_stops].sort((a, b) => a.sequence - b.sequence);
@@ -126,7 +132,9 @@ export async function getExploreJourneys(selected: SelectedDestination | null, t
         mapStops: stops.map(stop => ({ id: stop.id, name: stop.name, position: stop.sequence, coordinates: storedCoordinates(stop.latitude, stop.longitude) })),
         matchingStops: selected ? [...new Set(stops.filter(stop => matchesStop(selected, stop)).map(stop => stop.name))] : [],
       }];
-    }) };
+    });
+    const collection = browseJourneys(journeys, options);
+    return { ...empty, loaded: true, ...collection };
   } catch { return { ...empty, error: 'Published journeys could not be loaded. Please try again.' }; }
 }
 
