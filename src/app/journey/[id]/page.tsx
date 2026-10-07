@@ -1,3 +1,5 @@
+import { getJourneyLineage } from '@/lib/journey/lineage-queries';
+import { JourneyOriginSection, InspiredJourneys } from '@/components/journey/journey-lineage';
 import { OwnerActions } from '@/components/journey/owner-actions';
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -25,7 +27,7 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const journey = await getJourneyDetail(id);
   if (!journey) notFound();
-  const source = journey.copiedFrom ? await getJourneyDetail(journey.copiedFrom).catch(() => null) : null;
+  const lineage = await getJourneyLineage(journey);
   const owner = !!journey.viewerId && journey.creatorId === journey.viewerId;
   const destination = getDestination(journey.destinationSlug);
   const destinationName = journey.destinationName || destination?.name;
@@ -60,13 +62,15 @@ export default async function JourneyPage({ params }: { params: Promise<{ id: st
     </section>
     {owner && <OwnerActions id={id}/>}
     {journey.status === "draft" && <p className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">This journey is private. It is not visible in public discovery. <Link href={`/create?draft=${id}`} className="font-semibold underline">Continue editing your draft →</Link></p>}
-    {journey.copiedFrom && <p className="text-sm text-stone-500">{source ? <>Remixed from <Link href={`/journey/${source.id}`} className="underline">{source.title}</Link></> : 'Remixed from a journey that is no longer publicly available.'}</p>}
+
     {journey.isDemo && <p className="rounded-2xl bg-[#e7eedf] p-4 text-sm leading-6">This is a sample journey created for the Journey demo, not a real user post. Stops and approximate map positions illustrate a route; they are not verified travel instructions.</p>}
     </JourneyRoute>
+    {lineage.source && <JourneyOriginSection source={lineage.source} root={lineage.root}/>}
     <section aria-label="About the creator" className="border-t border-stone-200 pt-8">
       <p className="text-xs font-semibold tracking-[0.18em] text-brand uppercase">About the creator</p>
       <div className="mt-5 flex flex-wrap items-center gap-4"><CreatorAvatar name={journey.creatorName} src={journey.creatorAvatar}/><div className="min-w-0 max-w-full break-words"><h2 className="text-xl font-semibold">{journey.creatorName}</h2>{journey.creatorUsername && <p className="mt-1 text-sm text-stone-500">@{journey.creatorUsername}</p>}</div>{journey.creatorUsername && <Link href={`/profile/${encodeURIComponent(journey.creatorUsername)}`} className="inline-flex min-h-11 items-center rounded-full border border-stone-200 bg-white px-5 text-sm font-semibold text-brand">View Profile</Link>}</div>
     </section>
+    <InspiredJourneys journeys={lineage.inspired}/>
     <Link href={destination ? `/destination/${journey.destinationSlug}` : "/explore"} className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-sm font-semibold text-white">More journeys {destination ? `through ${destination.name}` : "to explore"} ↗</Link>
   </article>;
 }
