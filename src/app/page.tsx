@@ -14,6 +14,8 @@ import { JsonLd } from '@/components/seo/json-ld';
 import { WelcomeCard } from '@/components/ui/welcome-card';
 import { RetryButton } from '@/components/ui/retry-button';
 import { JourneySearch } from '@/components/journey/discovery-controls';
+import { homeRecommendations } from '@/lib/discovery/recommendation-queries';
+import { RecommendedJourneys } from '@/components/journey/recommended-journeys';
 
 export const metadata = {
   ...publicMetadata('Discover & Share Travel Journeys', siteDescription, '/'),
@@ -32,6 +34,7 @@ export default async function HomePage() {
   // The launch homepage features real published journeys, never demo fallback data.
   const featured = result.source === 'supabase' ? result.journeys.filter(journey => !journey.isDemo).slice(0, 6) : [];
   const popular = [...result.journeys].filter(journey => journey.likes > 0).sort((a, b) => b.likes - a.likes).slice(0, 3);
+  const recommendations = await homeRecommendations(result.journeys, [...featured, ...popular].map(j => j.id));
   const publishedDestinations = result.source === 'supabase' ? [...new Set(result.journeys.filter(journey => !journey.isDemo).map(journey => journey.destinationSlug))].flatMap(slug => { const destination = getDestination(slug); return destination ? [destination] : []; }) : [];
   // Temporary editorial shortcuts when there is no live destination data.
   // These links are not the search source; search is worldwide Mapbox geocoding.
@@ -54,6 +57,7 @@ export default async function HomePage() {
     </section>
     <div className="max-w-xl"><JourneySearch /></div>
     <WelcomeCard />
+    <RecommendedJourneys {...recommendations}/>
 
     <section aria-labelledby="popular-heading" className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="popular-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Popular with travelers.</h2><p className="mt-2 text-sm text-stone-600">Most liked among the latest 100 public journeys.</p></div><Link href="/explore?sort=popular" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">Explore popular journeys ↗</Link></div>
