@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getSupabaseConfig } from '@/lib/env';
 import { safeNext } from '@/lib/auth/redirect';
+import Image from 'next/image';
+import styles from './auth-signup.module.css';
 
 export function AuthForm({ next = '/profile', onLogin }: { next?: string; onLogin?: () => void }) {
   const router = useRouter();
@@ -13,7 +15,7 @@ export function AuthForm({ next = '/profile', onLogin }: { next?: string; onLogi
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   if (!getSupabaseConfig()) return <p className="mt-5 rounded-xl bg-stone-100 p-4 text-sm">Account actions are not available in this unconnected preview. You can keep exploring public journeys.</p>;
-  return <form className="mt-5 space-y-4" onSubmit={async event => {
+  return <form className={signup ? `mt-5 space-y-4 ${styles.signup}` : 'mt-5 space-y-4'} onSubmit={async event => {
     event.preventDefault(); setBusy(true); setError(''); setMessage('');
     const values = new FormData(event.currentTarget);
     const email = String(values.get('email')).trim();
@@ -33,12 +35,24 @@ export function AuthForm({ next = '/profile', onLogin }: { next?: string; onLogi
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Authentication is unavailable. Please try again.'); }
     finally { setBusy(false); }
   }}>
+    {signup && <div className={styles.intro}>
+      <p className={styles.eyebrow}>Your next chapter</p>
+      <h2>Create an account.</h2>
+      <p>Keep journeys for later and make a private remix.</p>
+    </div>}
     {signup && <label className="block text-sm font-medium">Name<input name="name" autoComplete="name" maxLength={100} required className="mt-2 min-h-12 w-full rounded-xl border border-stone-200 px-3"/></label>}
     <label className="block text-sm font-medium">Email<input name="email" type="email" autoComplete="email" required className="mt-2 min-h-12 w-full rounded-xl border border-stone-200 px-3"/></label>
     <label className="block text-sm font-medium">Password<input name="password" type="password" minLength={signup ? 8 : undefined} autoComplete={signup ? 'new-password' : 'current-password'} required className="mt-2 min-h-12 w-full rounded-xl border border-stone-200 px-3"/></label>
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {message && <p role="status" className="text-sm text-brand">{message}</p>}
     <button disabled={busy} className="min-h-12 w-full rounded-full bg-brand text-sm font-semibold text-white disabled:opacity-60">{busy ? 'Please wait…' : signup ? 'Sign up' : 'Log in'}</button>
+    {signup && <div className={styles.googleOption}>
+      <button type="button" disabled className={styles.googleButton} aria-describedby="google-signup-unavailable">
+        <Image src="/images/google-g.png" alt="" width={24} height={24} unoptimized />
+        Continue with Google
+      </button>
+      <p id="google-signup-unavailable">Google sign-up is not available yet.</p>
+    </div>}
     <button type="button" disabled={busy} onClick={() => { setSignup(!signup); setError(''); setMessage(''); }} className="min-h-11 w-full text-sm underline underline-offset-4">{signup ? 'Already have an account? Log in' : 'New to Journey? Sign up'}</button>
   </form>;
 }
