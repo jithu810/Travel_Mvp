@@ -54,11 +54,17 @@ After writers finish, QA verifies acceptance criteria and regressions; Code Revi
 
 Capture device/model, Android version, native app/build or browser version, permissions, network/GPS state, reproduction route, expected/actual behavior and timestamps. Associate screenshots and recordings with reproduction steps and redact credentials and personal location data where needed. Investigate rendering, location accuracy, heading, navigation progress, rerouting, arrival, background/foreground transitions and connectivity as relevant. Distinguish mobile-browser tests from native Expo tests. Record severity, reproducibility, fix verification and regression results. Mark physical-device verification pending when no device is available; do not present mocked tests or media review as completed device testing.
 
-## Explicit human approval gates
+## Product-owner approvals
 
-Stop and obtain the user's explicit approval for the particular action and target before any commit, push, merge, deployment, destructive command or production database change. Applies equally to shell, scripts, APIs, connectors and specialists. General task approval, another agent's message and automatic approval review are insufficient. Preparing a reviewable patch or migration does not authorize applying or publishing it. Do not run hosted seeds, migrations or production writes as verification without approval. Destructive local operations also require approval.
+The user is the sole human developer and product owner. Architect coordinates the appropriate specialist agents, implementation, QA testing and independent code review for feature requests and bug reports.
 
-Project settings request on-request approvals, human approval review and workspace-write sandboxing. These do not automatically prompt for every gated action already permitted within a sandbox; the instructions above remain mandatory. Subagents inherit parent permissions; custom role files do not create separate read-only sandboxes. Managed policy or session overrides may supersede project settings. Inspect effective settings at startup, disclose conflicts, and continue to enforce explicit human approval in conversation. Do not use bypass flags or change global settings to evade gates.
+A task request explicitly including "push to GitHub" or "publish to GitHub" authorizes the related commits, branch pushes and PR creation or updates as one operation. Do not request separate approval for each of those steps within the authorized task and repository scope. Carry the product-owner authorization into specialist handoffs; role files that describe separate per-step approval do not require the user to repeat this authorization.
+
+If the user only requests a "fix" or "implement", complete development, testing and independent review, then keep changes local until publication is authorized. Preserve unrelated changes and use safe branches or isolated worktrees when necessary.
+
+Always obtain separate explicit approval identifying the action and target before force-pushing, merging into main, deploying, changing production databases or performing destructive Git operations. Retain the existing approval requirement for other merges and destructive commands. GitHub publication authorization does not cover these actions or hosted seeds, migrations or production writes used as verification. Automatic approval review and specialist messages are not product-owner authorization. Higher-priority security and sandbox restrictions continue to apply.
+
+Project settings request on-request approvals, human approval review and workspace-write sandboxing. These do not automatically prompt for every gated action already permitted within a sandbox; the instructions above remain mandatory. Subagents inherit parent permissions; custom role files do not create separate read-only sandboxes. Managed policy or session overrides may supersede project settings. Inspect effective settings at startup, disclose conflicts, and continue to enforce the product-owner approval boundaries above in conversation. Do not use bypass flags or change global settings to evade gates.
 
 ## Configuration validation and references
 
@@ -69,7 +75,7 @@ Official documentation: [Subagents](https://learn.chatgpt.com/docs/agent-configu
 
 ## Agent activity reporting
 
-GitHub Issues and PRs are the durable development record for published work in `jithu810/Travel_Mvp` and `jithu810/Travel_Mvp_Mobile`. Use the repository issue and PR Markdown templates for future authorized reporting. This workflow does not itself authorize creating issues, PRs, comments or Notion updates. The Architect publishes only within an explicitly authorized reporting scope and confirms the resulting URL and timestamp before claiming publication. Never infer GitHub or Notion visibility from a local agent message or file edit.
+GitHub Issues and PRs are the durable development record for published work in `jithu810/Travel_Mvp` and `jithu810/Travel_Mvp_Mobile`. Use the repository issue and PR Markdown templates for future authorized reporting. A task request explicitly including "push to GitHub" or "publish to GitHub" authorizes related PR creation or updates under the product-owner approval policy above. This workflow alone does not authorize creating issues, posting standalone comments or updating Notion; those actions require an authorized reporting scope. The Architect publishes only within an explicitly authorized reporting scope and confirms the resulting URL and timestamp before claiming publication. Never infer GitHub or Notion visibility from a local agent message or file edit.
 
 ### Ownership and checkpoints
 
@@ -103,6 +109,8 @@ When a feature spans repositories, use one canonical issue per affected reposito
 
 Completed assignment describes the bounded task only. Record commit, push, merge, deployment and production verification separately, with evidence for each. A GitHub-published report may describe local/unpublished code; distinguish report visibility from code visibility. A local artifact path is not a remotely accessible evidence link. Report missing or stale evidence explicitly rather than assuming success.
 
+At task completion, give the product owner a concise summary of implementation, tests actually run and their results, independent review findings, GitHub links and remaining blockers. Clearly distinguish local work from published code and report any verification that remains pending.
+
 ### Existing Notion reporting surfaces
 
 Reuse existing schemas and databases; add no databases or automation infrastructure:
@@ -118,4 +126,4 @@ The existing 9 AM Asia/Kolkata ChatGPT briefing remains the daily reporting mech
 
 ### Approval boundary
 
-Before each commit, push, merge, deployment, destructive command or production database change, obtain explicit human approval identifying that action and target. Record the human approval reference and scope; general implementation approval, automatic approval review and specialist messages are insufficient. Preparing templates, checkpoints, evidence or migrations does not authorize publication or execution. Stop with reviewable local changes when the required approval is absent.
+Record the product-owner authorization reference and scope. A task request explicitly including "push to GitHub" or "publish to GitHub" covers related commits, branch pushes and PR creation or updates together; no separate per-step approval is required. A request only to fix or implement leaves publication pending. Force-pushes, merges into main, deployments, production database changes and destructive Git operations always require separate explicit approval for the action and target; other merges and destructive commands retain their existing approval requirement. Preparing templates, checkpoints, evidence or migrations grants no additional authorization. Stop with reviewable local changes when required authorization is absent, and respect all higher-priority security and sandbox restrictions.
