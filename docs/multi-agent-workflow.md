@@ -7,6 +7,8 @@ This setup changes only Web repository instructions and Codex configuration. It 
 
 Start a fresh Codex chat rooted at the Web repository after configuration changes. Existing chats must not assume their already-loaded instructions, role inventory or limits have refreshed. The primary session is Architect through AGENTS.md; the architect role file is reusable guidance, not a second orchestrator. Configuration loading does not start work. Wait for the user's next task.
 
+Before assigning work in a fresh chat, confirm that the Web repository is trusted so its project-local configuration can load. Inspect effective configuration and any managed or session overrides, including agent availability, the specialist concurrency limit, sandbox access and approval review. Confirm that `web_developer`, `mobile_developer`, `backend_developer`, `qa_tester` and `code_reviewer` are available through the active delegation interface. If named roles are unavailable, use the role-instruction fallback below; if delegation tools are unavailable, report the limitation before assigning work. Report any startup checks that cannot be completed rather than claiming configuration is verified. These checks do not authorize development or a delegation smoke test.
+
 ## Native delegation and concurrency
 
 Use native Codex subagent spawn, messaging, follow-up, status, wait and interruption tools. The Architect sends bounded tasks and receives results directly; the user does not forward prompts. Use named custom roles when supported by the active tool interface. If the interface only accepts a task/message, include the corresponding role file's instructions in that task. Do not create separate sidebar chats as a substitute for subagents without the user's request.
@@ -28,9 +30,13 @@ Standalone `.codex/agents/*.toml` files define name, description and developer_i
 
 API handlers under src/app belong to Backend when assigned, not automatically Web. Shared types, src/lib helpers, manifests, lockfiles, root configuration and cross-cutting documentation need one named owner. Ownership is coordination, not an ACL. Never write outside the task's paths. Report a required cross-scope change to Architect and wait for reassignment. Do not modify Mobile during this configuration step; future tasks must read its own instructions and verify filesystem access first.
 
+Project `.codex/config.toml` includes `D:/Travel_Mvp_Mobile` in `sandbox_workspace_write.writable_roots`. This requests filesystem write access when honored by the effective session policy; it does not authorize a Mobile task. Before Mobile work, obtain task authorization, verify effective access and read the Mobile repository's own instructions.
+
 ## Task handoff
 
 Before work, inspect branch/status and record tracked and untracked baseline changes. Protect backend/integrity-hardening and its existing scripts, tests, audit and migrations. No automatic stash, reset, checkout, clean, overwrite, or staging of unrelated work. A new worktree does not include dirty files automatically; agree the intended baseline before isolating future work.
+
+If Git reports dubious repository ownership in the sandbox, use a command-scoped exception for read-only inspection, for example `git -c safe.directory=D:/Travel_Mvp status --short --branch` or `git -c safe.directory=D:/Travel_Mvp rev-parse HEAD`. This trusts the explicitly named repository for that invocation only. Do not change global Git settings or use a wildcard trust exception. This workaround does not authorize Git writes or other gated actions.
 
 Architect supplies each specialist:
 
