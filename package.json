@@ -8,10 +8,12 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:db": "node scripts/test-schema.mjs && node scripts/test-creation-schema.mjs && node scripts/test-track-schema.mjs",
+    "test:db": "node scripts/test-schema.mjs && node scripts/test-creation-schema.mjs && node scripts/test-track-schema.mjs && node scripts/test-integrity-schema.mjs && node scripts/test-copy-journey-selected.mjs",
+    "test:db:integrity": "node scripts/test-integrity-schema.mjs",
     "test:creation": "playwright test --config playwright.creation.config.ts",
     "test:e2e": "playwright test",
-    "seed:demo": "node scripts/generate-demo-seed.mjs"
+    "seed:demo": "node scripts/generate-demo-seed.mjs",
+    "test:db:selected": "node scripts/test-copy-journey-selected.mjs"
   },
   "engines": {
     "node": ">=22.14.0"
