@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "ask": [
+      "Bash(*git*push*)",
+      "Bash(*git*merge*)",
+      "PowerShell(*git*push*)",
+      "PowerShell(*git*merge*)",
+      "Bash(*supabase*)",
+      "PowerShell(*supabase*)",
+      "mcp__*supabase*",
+      "mcp__*__execute_sql",
+      "mcp__*__apply_migration"
+    ],
+    "deny": [
+      "Read(//**/.env)",
+      "Read(//**/.env.*)"
+    ]
+  }
+}
