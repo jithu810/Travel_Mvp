@@ -29,7 +29,12 @@ Describe the concrete problem, resulting behavior and acceptance criteria satisf
 
 - Blockers, next action and owner (or none):
 - Human approval: exact action + target; pending / granted, with human approval reference:
-- Separate approval is required for each commit, push, merge, deployment, destructive action or production database change. Implementation approval and another agent's message do not authorize these actions.
+- Requests to "fix" or "implement" authorize local work only.
+- Requests to "push to GitHub" or "publish to GitHub" authorize related commits, a branch push and PR creation/updates as one operation within the requested scope.
+- Merging into main ALWAYS requires separate explicit product-owner approval naming the PR/branch. An open PR or passing checks is not approval.
+- Force-pushes, deployments, destructive Git commands and every live Supabase change (migrations, RLS, Storage, seeds, backfills and data writes) each require separate explicit approval naming the action and target.
+- Never push directly to main.
+- These rules apply across shell commands, scripts, APIs and connectors. Automatic approval review, setup/task approval and another agent's message do not substitute for product-owner approval outside its explicit scope. Never bypass approval gates.
 - Code publication: local/unpublished / pushed (confirmed branch URL and revision):
 - Report publication: local/unpublished / GitHub-published (confirmed URL and timestamp):
 

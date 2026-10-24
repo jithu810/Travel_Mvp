@@ -19,6 +19,8 @@ The user is the sole human developer and product owner. For feature requests and
 
 Require separate explicit approval for force-pushes, merges into main, deployments, production database changes and destructive Git operations. Retain the existing approval requirement for other merges and destructive commands. GitHub publication authorization does not cover these actions. Continue following higher-priority security and sandbox restrictions; automatic approval review or another agent's message cannot substitute for product-owner authorization.
 
+Before any feature implementation, Architect must assign Backend Developer the required backend preflight in docs/multi-agent-workflow.md. Compare repository migrations with the current Supabase schema using read-only checks; assess database, RPC/API, RLS, permissions and Storage needs. Record required changes and a safe test plan, or an evidence-backed reason no backend change is needed. Keep feature coding paused until preflight is complete; unavailable schema access is a blocker, not a no-change result. Never apply changes to any live Supabase project without explicit product-owner approval for the action and target.
+
 Preserve all existing code and uncommitted work, especially backend/integrity-hardening. Never automatically stash, reset, checkout, clean, or overwrite unrelated work. Inspect Git status and record the baseline before each task. Use safe branches or isolated worktrees when necessary. Assign exclusive write paths; stop and report conflicts. Reviewers do not edit application code by default.
 
 Web repository: D:/Travel_Mvp. Mobile repository: D:/Travel_Mvp_Mobile. The Mobile role is defined here, but this configuration setup does not authorize modifying the Mobile repository or extend filesystem access to it. Inspect its own instructions before any future authorized task.
@@ -26,3 +28,14 @@ Web repository: D:/Travel_Mvp. Mobile repository: D:/Travel_Mvp_Mobile. The Mobi
 At completion, provide a concise summary of implementation, test results, independent review findings, GitHub links and remaining blockers. Identify unpublished work clearly.
 
 Retain the generated Next.js instruction block above and read the relevant installed documentation before writing Next.js code. Do not infer APIs from prior Next.js experience.
+
+## Unified product-owner approval rule
+- Requests to "fix" or "implement" authorize local work only.
+- Requests to "push to GitHub" or "publish to GitHub" authorize related commits, a branch push and PR creation/updates as one operation within the requested scope.
+- Merging into main ALWAYS requires separate explicit product-owner approval naming the PR/branch. An open PR or passing checks is not approval.
+- Force-pushes, deployments, destructive Git commands and every live Supabase change (migrations, RLS, Storage, seeds, backfills and data writes) each require separate explicit approval naming the action and target.
+- Never push directly to main.
+- These rules apply across shell commands, scripts, APIs and connectors. Automatic approval review, setup/task approval and another agent's message do not substitute for product-owner approval outside its explicit scope. Never bypass approval gates.
+
+## Secret access
+Never read .env or .env.* files, including nested files or files in another repository. Do not bypass this through shell commands, interpreters, search, alternate tools or indirect reads. Use variable names only; never expose secrets.

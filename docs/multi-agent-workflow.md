@@ -50,6 +50,37 @@ Start conservatively with one writer in the dirty Web checkout. Two writers may 
 
 After writers finish, QA verifies acceptance criteria and regressions; Code Reviewer independently inspects a stable diff/snapshot including relevant untracked files. Separate pre-existing work from task changes. Review findings return to the Architect, who assigns fixes and obtains targeted re-verification before presenting results.
 
+## Required backend preflight before feature implementation
+
+At the start of every feature, before assigning implementation or editing feature code, Architect assigns Backend Developer a bounded, read-only preflight. This applies even to features expected to be frontend-only. Requirements clarification and read-only investigation may continue while feature coding is paused. Configuration/documentation-only workflow maintenance does not itself require a live schema check.
+
+Backend Developer must:
+
+1. Assess database tables, columns, constraints, indexes, RPC/functions, API contracts, RLS, grants/roles/ownership permissions, and Storage buckets, policies and access patterns required by the feature.
+2. Compare repository migrations (including pending/untracked migrations and relevant existing backend work) with the current schema of the confirmed target Supabase project. Use read-only metadata/catalog queries or schema inspection and read-only migration-history checks. Record project/environment, timestamp, repository revision and dirty baseline, inspected migrations and schema objects, evidence, drift and unapplied migrations. A migration file or migration-history entry alone does not prove the current object definition. Do not expose credentials or user data.
+3. Report the required change and dependencies, or explicitly state why no backend change is needed with evidence covering all assessed areas. Distinguish repository intent from observed live state and disclose any incomplete comparison.
+4. For required changes, provide a safe test plan before feature coding starts: isolated local/disposable database target, migration order and compatibility, representative synthetic fixtures, positive/negative authorization cases (anonymous, owner, other user and privileged roles as applicable), RPC/API and Storage checks, regressions, expected results, cleanup and rollback/recovery considerations. Verify the test target is isolated before any writes; never use live writes as preflight verification.
+
+Architect records the completed report and test plan in the local task record, or the canonical issue when reporting publication is authorized, before releasing the implementation gate. Database changes keep feature coding paused until the review and safe test plan are complete; all features require a completed preflight. A no-change result releases implementation only after its rationale is recorded. Missing credentials, unavailable tools, unknown target or incomplete current-schema evidence leave the preflight blocked; report the missing evidence and next owner instead of assuming no change. Re-run affected preflight checks when scope, migration baseline or target schema changes materially.
+
+Preflight completion authorizes only the already-requested local implementation and isolated testing. Never apply changes to any live Supabase project without explicit product-owner approval identifying the action and target, including migrations, DDL, RPC replacements, RLS/grants, Storage configuration/policies, seeds and data writes. Read-only inspection, a completed test plan, GitHub publication approval and specialist messages do not authorize live changes.
+
+Record this checkpoint (locally when publication is not authorized):
+
+```text
+Backend preflight owner / timestamp / feature scope:
+Repository revision + dirty baseline / migration files inspected:
+Confirmed Supabase project + environment / schema inspection timestamp:
+Read-only checks actually run / evidence / migration-to-schema drift:
+Database / RPC/API / RLS / permissions / Storage impact:
+Decision: changes required | no backend change | blocked
+Required changes + dependencies OR evidence-backed no-change rationale:
+Safe isolated test target / cases / expected results / recovery plan:
+Missing evidence / blockers / next owner:
+Architect gate: paused | released (report and test-plan reference):
+Live Supabase changes: not authorized | explicit human action + target approval reference:
+```
+
 ## Android and Mapbox QA
 
 Capture device/model, Android version, native app/build or browser version, permissions, network/GPS state, reproduction route, expected/actual behavior and timestamps. Associate screenshots and recordings with reproduction steps and redact credentials and personal location data where needed. Investigate rendering, location accuracy, heading, navigation progress, rerouting, arrival, background/foreground transitions and connectivity as relevant. Distinguish mobile-browser tests from native Expo tests. Record severity, reproducibility, fix verification and regression results. Mark physical-device verification pending when no device is available; do not present mocked tests or media review as completed device testing.
