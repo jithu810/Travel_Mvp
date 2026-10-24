@@ -1,0 +1,12 @@
+# Project-local; no global settings are changed.
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+
+[agents]
+enabled = true
+# Excludes the primary Architect session.
+max_concurrent_threads_per_session = 2
+
+[sandbox_workspace_write]
+writable_roots = ["D:/Travel_Mvp_Mobile"]
