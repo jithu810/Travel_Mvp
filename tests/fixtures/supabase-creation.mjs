@@ -75,7 +75,7 @@ const server=http.createServer(async(request,response)=>{
     const source=journeys.get(body.source_id);
     if (!uid || source?.status!=='published') return json({ code:'42501',message:'Published only' },403);
     const id=crypto.randomUUID();
-    journeys.set(id,{ ...source,id,user_id:uid,status:'draft',published_at:null,updated_at:new Date().toISOString(),copied_from_journey_id:source.id,is_demo:false,stops:source.stops.map(s=>({ ...s,id:crypto.randomUUID() })) });
+    journeys.set(id,{ ...source,id,user_id:uid,status:'draft',published_at:null,updated_at:new Date().toISOString(),cover_image_path:null,copied_from_journey_id:source.id,is_demo:false,stops:source.stops.map(s=>({ ...s,id:crypto.randomUUID(),photo_path:null })) });
     return json(id);
   }
   if (url.pathname==='/rest/v1/journeys') {
