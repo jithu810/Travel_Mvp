@@ -15,6 +15,7 @@ import { WelcomeCard } from '@/components/ui/welcome-card';
 import { RetryButton } from '@/components/ui/retry-button';
 import { JourneySearch } from '@/components/journey/discovery-controls';
 import { homeRecommendations } from '@/lib/discovery/recommendation-queries';
+import { discoveryViewerId } from '@/lib/discovery/viewer';
 import { RecommendedJourneys } from '@/components/journey/recommended-journeys';
 
 export const metadata = {
@@ -30,7 +31,9 @@ const travelStyles = [
 ];
 
 export default async function HomePage() {
-  const result = await getExploreJourneys(null, "all", { pageSize: 100 });
+  // Signed-in viewers discover other travelers' journeys, not their own.
+  const viewerId = await discoveryViewerId();
+  const result = await getExploreJourneys(null, "all", { pageSize: 100, excludeUserId: viewerId });
   // The launch homepage features real published journeys, never demo fallback data.
   const featured = result.source === 'supabase' ? result.journeys.filter(journey => !journey.isDemo).slice(0, 6) : [];
   const popular = [...result.journeys].filter(journey => journey.likes > 0).sort((a, b) => b.likes - a.likes).slice(0, 3);
@@ -60,13 +63,13 @@ export default async function HomePage() {
     <RecommendedJourneys {...recommendations}/>
 
     <section aria-labelledby="popular-heading" className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="popular-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Popular with travelers.</h2><p className="mt-2 text-sm text-stone-600">Most liked among the latest 100 public journeys.</p></div><Link href="/explore?sort=popular" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">Explore popular journeys ↗</Link></div>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="popular-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Popular with travelers.</h2><p className="mt-2 text-sm text-stone-600">{viewerId ? 'Most liked among other travelers’ latest 100 journeys.' : 'Most liked among the latest 100 public journeys.'}</p></div><Link href="/explore?sort=popular" className="inline-flex min-h-11 items-center text-sm font-semibold text-brand">Explore popular journeys ↗</Link></div>
       {popular.length ? <JourneyGrid journeys={popular} /> : <p className="text-sm leading-6 text-stone-500">{result.error ? 'Popular stories will return when journeys finish loading.' : 'Traveler favorites will appear here as public journeys receive likes.'}</p>}
     </section>
 
     <section aria-labelledby="journeys-heading" className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="mb-2 text-xs font-semibold tracking-[0.15em] uppercase text-brand">Through a traveler’s eyes</p><h2 id="journeys-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Recently published.</h2><p className="mt-2 text-sm text-stone-600">Real places, personal routes, and the stops along the way.</p></div><Link href="/explore?sort=recent" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand">Explore journeys <span aria-hidden="true">↗</span></Link></div>
-      {featured.length ? <JourneyGrid journeys={featured} /> : <EmptyState title={result.error ? 'Journeys are taking a little longer to arrive.' : 'The next great journey could be yours.'}><p>{result.error ? 'We couldn’t load published journeys right now. You can still browse destinations, or try again.' : 'Published traveler journeys will appear here. In the meantime, find a destination that sparks your curiosity.'}</p><div className="flex flex-wrap gap-3">{result.error && <RetryButton />}<Link href="/explore" className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brand px-5 font-semibold text-white">Browse destinations</Link></div></EmptyState>}
+      {featured.length ? <JourneyGrid journeys={featured} /> : <EmptyState title={result.error ? 'Journeys are taking a little longer to arrive.' : viewerId ? 'No journeys from other travelers yet.' : 'The next great journey could be yours.'}><p>{result.error ? 'We couldn’t load published journeys right now. You can still browse destinations, or try again.' : 'Published traveler journeys will appear here. In the meantime, find a destination that sparks your curiosity.'}</p><div className="flex flex-wrap gap-3">{result.error && <RetryButton />}<Link href="/explore" className="mt-4 inline-flex min-h-11 items-center rounded-full bg-brand px-5 font-semibold text-white">Browse destinations</Link></div></EmptyState>}
     </section>
 
     <section aria-labelledby="destinations-heading">
