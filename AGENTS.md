@@ -25,6 +25,8 @@ Preserve all existing code and uncommitted work, especially backend/integrity-ha
 
 Web repository: D:/Travel_Mvp. Mobile repository: D:/Travel_Mvp_Mobile. The Mobile role is defined here, but this configuration setup does not authorize modifying the Mobile repository or extend filesystem access to it. Inspect its own instructions before any future authorized task.
 
+Shared skills for all agents live in `.agents/skills/` (Claude Code reaches them through pointers in `.claude/skills/`). For any authorized Mobile feature, bug or design task that needs to see the phone, follow `.agents/skills/phone-session/SKILL.md` once per conversation.
+
 At completion, provide a concise summary of implementation, test results, independent review findings, GitHub links and remaining blockers. Identify unpublished work clearly.
 
 Retain the generated Next.js instruction block above and read the relevant installed documentation before writing Next.js code. Do not infer APIs from prior Next.js experience.
