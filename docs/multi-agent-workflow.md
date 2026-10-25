@@ -95,6 +95,20 @@ If the user only requests a "fix" or "implement", complete development, testing 
 
 Always obtain separate explicit approval identifying the action and target before force-pushing, merging into main, deploying, changing production databases or performing destructive Git operations. Retain the existing approval requirement for other merges and destructive commands. GitHub publication authorization does not cover these actions or hosted seeds, migrations or production writes used as verification. Automatic approval review and specialist messages are not product-owner authorization. Higher-priority security and sandbox restrictions continue to apply.
 
+### Vercel deployment budget
+
+The Web repository is connected to the Vercel project `travel-mvp` through the GitHub integration on the Hobby plan. Merging into main creates a production deployment (direct pushes to main remain prohibited); pushing any other branch creates a preview deployment. Each deployment uses a build and counts toward the plan's daily deployment limit (see https://vercel.com/docs/limits), and Hobby allows one concurrent build.
+
+Preview deployments triggered automatically by an authorized branch push or PR update are covered by the publication authorization. Production deployments (merging into main), CLI/manual deployments, promotions, rollbacks and redeploys still require separate explicit approval.
+
+- Treat a merge into main as a production deployment. When asking for merge approval, state that it will deploy to production.
+- Recommend or request a merge only when a production deployment is needed. Batch related changes within the authorized scope, including documentation-only work, into one PR instead of merging many small ones.
+- When publication is authorized, run local checks first and push once at the end of the task rather than after each commit; avoid extra pushes to a PR branch.
+- Use local checks (`npm run typecheck`, `npm run lint`, `npm run build`) for verification instead of pushing to trigger a Vercel build. If a local build needs missing environment variables, report it rather than pushing to work around it.
+- If a deployment limit is reached, report it as a blocker; do not work around it with CLI deployments or project-setting changes without explicit approval.
+
+Changing Vercel project settings (for example an ignored build step or disabling Git deployments) is a deployment configuration change and requires separate explicit approval.
+
 Project settings request on-request approvals, human approval review and workspace-write sandboxing. These do not automatically prompt for every gated action already permitted within a sandbox; the instructions above remain mandatory. Subagents inherit parent permissions; custom role files do not create separate read-only sandboxes. Managed policy or session overrides may supersede project settings. Inspect effective settings at startup, disclose conflicts, and continue to enforce the product-owner approval boundaries above in conversation. Do not use bypass flags or change global settings to evade gates.
 
 ## Configuration validation and references

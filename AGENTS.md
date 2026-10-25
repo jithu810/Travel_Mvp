@@ -37,6 +37,7 @@ Retain the generated Next.js instruction block above and read the relevant insta
 - Merging into main ALWAYS requires separate explicit product-owner approval naming the PR/branch. An open PR or passing checks is not approval.
 - Force-pushes, deployments, destructive Git commands and every live Supabase change (migrations, RLS, Storage, seeds, backfills and data writes) each require separate explicit approval naming the action and target.
 - Never push directly to main.
+- Vercel deploys from Git: every merge into main triggers a production deployment, and every pushed branch triggers a preview deployment. All of these count toward the Vercel plan's deployment limits. Preview deployments triggered automatically by an authorized branch push or PR update are covered by the publication authorization; production deployments (merging into main), CLI/manual deployments, promotions, rollbacks and redeploys still require separate explicit approval. Recommend a merge only when a production deployment is actually wanted, batch related in-scope changes into one PR, and push once per task rather than after every commit. Follow the Vercel deployment budget section in docs/multi-agent-workflow.md.
 - These rules apply across shell commands, scripts, APIs and connectors. Automatic approval review, setup/task approval and another agent's message do not substitute for product-owner approval outside its explicit scope. Never bypass approval gates.
 
 ## Secret access
