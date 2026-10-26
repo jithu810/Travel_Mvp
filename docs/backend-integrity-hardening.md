@@ -41,9 +41,10 @@ this document. Previously existing branch work was preserved. Web source/RPC
 signatures and error mapping are unchanged. Browser end-to-end and real-session
 Supabase verification were not run as part of these corrections.
 
-Status: implemented locally on `backend/integrity-hardening`; pending independent
-review corrections and isolated Supabase verification. No hosted backend has been contacted.
-No deferred aggregate triggers are included. Historical migrations are unchanged.
+Status (2026-10-26): carried on `backend/hardening-null-media` (draft PR #11), with the
+identity-helper fix below pending independent review. Read-only catalog checks of the live
+project informed the live-ACL test model. These migrations have not been applied to any
+hosted project. No deferred aggregate triggers are included. Historical migrations are unchanged.
 
 ## Enforcement boundary
 
@@ -66,7 +67,25 @@ update stops in place, modify Storage objects or read their other metadata.
 Functions fix search_path and qualify application objects. Temporary CREATE
 privileges needed for ownership transfer are revoked before commit.
 The migration administrator also receives temporary role membership for ownership
-transfer on non-superuser installations; it is removed before commit.
+transfer on non-superuser installations; it is removed before commit. On PostgreSQL
+16+ the non-superuser creator (live `postgres`) keeps its automatic admin-only
+membership (no INHERIT or SET); tests accept exactly that shape.
+
+Identity and Supabase ACLs: `journey_rpc` has no USAGE on schema `auth`. On Supabase
+the migration role (`postgres`) holds auth USAGE without grant option, so granting it
+would only warn. Because PL/pgSQL and SQL bodies are parsed at run time as the function
+owner, the journey_rpc-owned `save_journey`, `copy_journey` and
+`journey_media_readable` call `private.journey_rpc_uid()` instead of `auth.uid()`.
+The helper is SECURITY DEFINER with an empty search_path, stays owned by the migration
+role and is executable only by journey_rpc. The journey_rpc policies use it too.
+Client-facing policies keep `auth.uid()`: stored policy expressions need only EXECUTE
+on it (granted to PUBLIC), not schema USAGE. Activation aborts if the helper's owner,
+definition or ACL drifts, or if any of the three bodies names `auth.uid()`. It then
+smoke-tests the final functions as anon and authenticated, so a permission error aborts
+the transaction. `scripts/test-integrity-live-acl.mjs` applies the migration as a
+non-superuser migrator with live-like auth/Storage ownership. It shows that the
+previous pattern committed with a warning and then failed with 42501 "permission
+denied for schema auth", and that the fixed version works.
 
 RLS remains enabled for the execution role. Its journey UPDATE USING condition
 also admits published sources because PostgreSQL row-locking SELECT needs UPDATE

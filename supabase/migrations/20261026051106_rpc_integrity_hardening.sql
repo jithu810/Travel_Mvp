@@ -48,8 +48,23 @@ create role journey_rpc nologin noinherit nosuperuser nocreatedb nocreaterole no
 -- Permit ownership transfer by a CREATEROLE migration administrator that is not
 -- superuser. This temporary membership is removed before commit.
 grant journey_rpc to current_user;
-grant usage on schema public, private, auth, storage to journey_rpc;
-grant execute on function auth.uid() to journey_rpc;
+-- Caller identity for journey_rpc. On Supabase the migration role (postgres) holds
+-- auth USAGE without grant option, so it cannot grant auth USAGE to journey_rpc
+-- (GRANT only warns). Function bodies owned by journey_rpc are parsed as journey_rpc
+-- at run time, so they must not name auth.uid() directly; they call this helper,
+-- which stays owned by the migration role (it has auth USAGE). EXECUTE: journey_rpc only.
+create function private.journey_rpc_uid() returns uuid
+language sql stable security definer set search_path = '' as $$ select auth.uid() $$;
+revoke all on function private.journey_rpc_uid() from public, anon, authenticated;
+do $$ declare g name; begin
+  for g in select distinct r.rolname from pg_proc f cross join lateral aclexplode(f.proacl) a
+    join pg_roles r on r.oid = a.grantee
+    where f.oid = 'private.journey_rpc_uid()'::regprocedure and a.grantee <> f.proowner loop
+    execute format('revoke all on function private.journey_rpc_uid() from %I', g);
+  end loop;
+end $$;
+grant execute on function private.journey_rpc_uid() to journey_rpc;
+grant usage on schema public, private, storage to journey_rpc;
 grant select on public.journeys, public.journey_stops to journey_rpc;
 grant insert (id,user_id,title,description,destination_slug,destination_name,destination_latitude,
   destination_longitude,traveler_type,duration_days,cover_image_path,status,published_at,is_demo,copied_from_journey_id)
@@ -62,20 +77,20 @@ grant delete on public.journey_stops to journey_rpc;
 grant select (bucket_id,name) on storage.objects to journey_rpc;
 
 create policy journeys_rpc_read on public.journeys for select to journey_rpc
-  using (user_id = (select auth.uid()) or status = 'published');
+  using (user_id = (select private.journey_rpc_uid()) or status = 'published');
 create policy journeys_rpc_insert on public.journeys for insert to journey_rpc
-  with check (user_id = (select auth.uid()) and not is_demo);
+  with check (user_id = (select private.journey_rpc_uid()) and not is_demo);
 create policy journeys_rpc_update on public.journeys for update to journey_rpc
   -- SELECT FOR SHARE also needs UPDATE visibility. WITH CHECK prevents writes to
   -- another owner's published row; user_id has no UPDATE grant.
-  using (user_id = (select auth.uid()) or status = 'published')
-  with check (user_id = (select auth.uid()));
+  using (user_id = (select private.journey_rpc_uid()) or status = 'published')
+  with check (user_id = (select private.journey_rpc_uid()));
 create policy stops_rpc_read on public.journey_stops for select to journey_rpc using (
   exists (select 1 from public.journeys j where j.id = journey_id));
 create policy stops_rpc_insert on public.journey_stops for insert to journey_rpc with check (
-  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select auth.uid())));
+  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select private.journey_rpc_uid())));
 create policy stops_rpc_delete on public.journey_stops for delete to journey_rpc using (
-  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select auth.uid())));
+  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select private.journey_rpc_uid())));
 
 -- Authorized paths are capabilities scoped to a journey, never arbitrary object IDs.
 create table private.journey_media_authorizations (
@@ -89,9 +104,9 @@ grant select, insert, delete on private.journey_media_authorizations to journey_
 create policy media_rpc_read on private.journey_media_authorizations for select to journey_rpc using (
   exists (select 1 from public.journeys j where j.id = journey_id));
 create policy media_rpc_insert on private.journey_media_authorizations for insert to journey_rpc with check (
-  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select auth.uid())));
+  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select private.journey_rpc_uid())));
 create policy media_rpc_delete on private.journey_media_authorizations for delete to journey_rpc using (
-  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select auth.uid())));
+  exists (select 1 from public.journeys j where j.id = journey_id and j.user_id = (select private.journey_rpc_uid())));
 insert into private.journey_media_authorizations select journey_id, media_path
   from private.legacy_journey_media_inventory;
 
@@ -100,13 +115,16 @@ create function private.journey_media_readable(object_name text) returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (select 1 from private.journey_media_authorizations a join public.journeys j on j.id = a.journey_id
     where a.media_path = 'journey-media/' || object_name
-      and (j.status = 'published' or j.user_id = (select auth.uid()))
+      and (j.status = 'published' or j.user_id = (select private.journey_rpc_uid()))
       and (j.cover_image_path = a.media_path or exists (
         select 1 from public.journey_stops s where s.journey_id = j.id and s.photo_path = a.media_path)));
 $$;
 -- Ownership is transferred to the non-owner execution role before commit.
 revoke all on function private.journey_media_readable(text) from public;
 grant execute on function private.journey_media_readable(text) to anon, authenticated, journey_rpc;
+-- Policies store resolved expressions, so (select auth.uid()) here needs only EXECUTE
+-- on auth.uid() (PUBLIC on Supabase), not auth USAGE, for every listed role; anon and
+-- authenticated cannot execute private.journey_rpc_uid(), so this policy keeps auth.uid().
 drop policy journey_media_read on storage.objects;
 create policy journey_media_read on storage.objects for select to anon, authenticated, journey_rpc using (
   bucket_id = 'journey-media' and (split_part(name,'/',1) = (select auth.uid())::text
@@ -192,7 +210,7 @@ create or replace function public.save_journey(payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' set lock_timeout = '5s' as $$
 declare
   jid uuid;
-  uid uuid := (select auth.uid());
+  uid uuid := (select private.journey_rpc_uid());
   current_row public.journeys%rowtype;
   item jsonb;
   media text;
@@ -307,7 +325,7 @@ create or replace function public.copy_journey(source_id uuid)
 returns uuid language plpgsql security definer set search_path = '' set lock_timeout = '5s' as $$
 declare new_id uuid; source jsonb;
 begin
-  if (select auth.uid()) is null then raise exception 'Authentication required' using errcode = '28000'; end if;
+  if (select private.journey_rpc_uid()) is null then raise exception 'Authentication required' using errcode = '28000'; end if;
   -- Lock before snapshotting parent + children. Save takes the same parent lock.
   perform 1 from public.journeys where id = source_id and status = 'published' for share;
   if not found then raise exception 'Journey not found' using errcode = 'P0002'; end if;
@@ -315,7 +333,7 @@ begin
     into source from public.journeys j where j.id = source_id and j.status = 'published';
   if not found then raise exception 'Journey not found' using errcode = 'P0002'; end if;
   insert into public.journeys(user_id,title,description,destination_slug,destination_name,destination_latitude,destination_longitude,traveler_type,duration_days,cover_image_path,is_demo,copied_from_journey_id)
-    values((select auth.uid()),source->>'title',source->>'description',source->>'destination_slug',source->>'destination_name',(source->>'destination_latitude')::double precision,(source->>'destination_longitude')::double precision,source->>'traveler_type',(source->>'duration_days')::integer,null,false,source_id)
+    values((select private.journey_rpc_uid()),source->>'title',source->>'description',source->>'destination_slug',source->>'destination_name',(source->>'destination_latitude')::double precision,(source->>'destination_longitude')::double precision,source->>'traveler_type',(source->>'duration_days')::integer,null,false,source_id)
     returning id into new_id;
   insert into public.journey_stops(journey_id,sequence,name,description,latitude,longitude,mapbox_place_id,photo_path,rating,day_number)
     select new_id,sequence,name,description,latitude,longitude,mapbox_place_id,null,rating,day_number
@@ -389,6 +407,48 @@ do $$ begin
     or pg_has_role('authenticated','journey_rpc','MEMBER') or pg_has_role('anon','journey_rpc','MEMBER') then
     raise exception 'Unexpected inherited client mutation privileges: audit role memberships';
   end if;
+  -- Identity helper: migration-role owned, SECURITY DEFINER, empty search_path,
+  -- EXECUTE for journey_rpc only; journey_rpc-owned bodies never name auth.uid().
+  declare me name := current_user; begin
+    if not exists(select 1 from pg_proc where oid = 'private.journey_rpc_uid()'::regprocedure
+        and prosecdef and provolatile = 's' and proconfig = array['search_path=""']
+        and proowner = (select oid from pg_roles where rolname = me) and proowner <> 'journey_rpc'::regrole
+        and btrim(prosrc) = 'select auth.uid()')
+      or (select coalesce(jsonb_agg(jsonb_build_array(coalesce(r.rolname, 'PUBLIC'), a.privilege_type, a.is_grantable)
+          order by r.rolname), '[]')
+        from pg_proc f cross join lateral aclexplode(coalesce(f.proacl, acldefault('f', f.proowner))) a
+        left join pg_roles r on r.oid = a.grantee
+        where f.oid = 'private.journey_rpc_uid()'::regprocedure and a.grantee <> f.proowner)
+        is distinct from '[["journey_rpc","EXECUTE",false]]'::jsonb
+      or not has_function_privilege('journey_rpc', 'private.journey_rpc_uid()', 'EXECUTE') then
+      raise exception 'Identity helper drift: private.journey_rpc_uid ownership, definition or ACL';
+    end if;
+    if exists(select 1 from pg_proc where oid in ('public.save_journey(jsonb)'::regprocedure,
+        'public.copy_journey(uuid)'::regprocedure, 'private.journey_media_readable(text)'::regprocedure)
+        and pg_get_functiondef(oid) ~* 'auth\s*\.\s*uid\s*\(') then
+      raise exception 'Execution-role functions must use private.journey_rpc_uid(), not auth.uid()';
+    end if;
+    -- Smoke test as the client roles, against the final journey_rpc-owned functions.
+    -- No JWT is set, so each call stops at its identity check before any write;
+    -- a permission error (e.g. missing schema USAGE) propagates and aborts activation.
+    -- Expected errors are caught in subtransactions; the original role is restored.
+    execute 'set local role anon';
+    if private.journey_media_readable('activation-smoke/none') then
+      raise exception 'Activation smoke test: unexpected readable object';
+    end if;
+    execute 'set local role authenticated';
+    begin
+      perform public.save_journey('null'::jsonb);
+      raise exception 'Activation smoke test: save_journey accepted invalid input';
+    exception when invalid_parameter_value then null;
+    end;
+    begin
+      perform public.copy_journey(null);
+      raise exception 'Activation smoke test: copy_journey accepted a missing source';
+    exception when invalid_authorization_specification or no_data_found then null;
+    end;
+    execute format('set local role %I', me);
+  end;
 end $$;
 revoke journey_rpc from current_user;
 commit;

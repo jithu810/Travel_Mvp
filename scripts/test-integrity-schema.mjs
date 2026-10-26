@@ -39,7 +39,21 @@ try {
   await db.query('insert into auth.users(id) values($1),($2)', [owner,other]);
   const roles = (await db.query("select rolcanlogin,rolsuper,rolbypassrls,rolcreaterole from pg_roles where rolname='journey_rpc'")).rows[0];
   assert.deepEqual(roles, { rolcanlogin: false, rolsuper: false, rolbypassrls: false, rolcreaterole: false });
-  assert.equal((await db.query("select count(*)::int as n from pg_auth_members where roleid='journey_rpc'::regrole")).rows[0].n,0);
+  // PostgreSQL 16+ gives a non-superuser CREATEROLE creator (live: postgres) an automatic
+  // admin-only membership, which stays after the temporary grant is revoked. Accept only
+  // that shape: no INHERIT/SET for anyone, and never a client role.
+  assert.equal((await db.query(`select count(*)::int as n from pg_auth_members m join pg_roles r on r.oid=m.member
+    where m.roleid='journey_rpc'::regrole and (m.inherit_option or m.set_option or not m.admin_option
+      or r.rolname in ('anon','authenticated'))`)).rows[0].n,0);
+  // Identity helper stays owned by the migration role; only journey_rpc may execute it.
+  assert.deepEqual((await db.query(`select pg_get_userbyid(proowner) as owner,prosecdef,proconfig,
+      has_function_privilege('journey_rpc',oid,'EXECUTE') as rpc,has_function_privilege('anon',oid,'EXECUTE') as anon,
+      has_function_privilege('authenticated',oid,'EXECUTE') as authenticated
+    from pg_proc where oid='private.journey_rpc_uid()'::regprocedure`)).rows[0],
+    { owner:'postgres',prosecdef:true,proconfig:['search_path=""'],rpc:true,anon:false,authenticated:false });
+  assert.equal((await db.query(`select count(*)::int as n from pg_proc where oid in ('public.save_journey(jsonb)'::regprocedure,
+    'public.copy_journey(uuid)'::regprocedure,'private.journey_media_readable(text)'::regprocedure)
+    and pg_get_functiondef(oid) ~ 'auth\\.uid\\('`)).rows[0].n,0,'Execution-role bodies use the identity helper');
   assert.equal((await db.query(`select count(*)::int as n from pg_proc p join pg_roles r on r.oid=p.proowner
     where p.oid in ('public.save_journey(jsonb)'::regprocedure,'public.copy_journey(uuid)'::regprocedure)
       and r.rolname='journey_rpc' and p.prosecdef and p.proconfig @> array['search_path=""']`)).rows[0].n, 2);
@@ -89,6 +103,7 @@ try {
       `insert into public.journeys(id,user_id,title) values('${p.id}','${owner}','Bypass') on conflict(id) do update set title=excluded.title`,
       `insert into private.journey_media_authorizations values('${p.id}','forged')`,
       "select private.copy_media_path('https://example.com/image.jpg')",
+      'select private.journey_rpc_uid()',
     ]) await rejects(db.exec(sql),'42501');
   }
   await as(db,'authenticated',other);
@@ -391,4 +406,13 @@ await hardeningRejects(`do $d$ declare d text := pg_get_functiondef('private.sta
   begin execute replace(d,'source->>''traveler_type'',days,null,false,source_id)',
     'source->>''traveler_type'',days,private.copy_media_path(source->>''cover_image_path''),false,source_id)'); end $d$`,/Remix media copy detected/);
 await hardeningRejects('create function private.copy_authorized_media(source_id uuid, media text) returns text language sql as $$ select media $$',/Remix media copy detected/);
+// Execution-role bodies must not name auth.uid() (live journey_rpc has no auth USAGE;
+// see test-integrity-live-acl.mjs), and the identity helper must stay journey_rpc-only.
+const directUid=hardeningSql.replace('uid uuid := (select private.journey_rpc_uid());','uid uuid := (select auth.uid());');
+assert.notEqual(directUid,hardeningSql);
+await hardeningRejects(null,/must use private\.journey_rpc_uid\(\), not auth\.uid\(\)/,directUid);
+const widenedHelper=hardeningSql.replace('grant execute on function private.journey_rpc_uid() to journey_rpc;',
+  'grant execute on function private.journey_rpc_uid() to journey_rpc, authenticated;');
+assert.notEqual(widenedHelper,hardeningSql);
+await hardeningRejects(null,/Identity helper drift/,widenedHelper);
 console.log(`PASS: activation allowlist accepts only the recorded live customize-stops/thumbnail policies and the postcondition guard rejects media-copying copy paths (${checks} checks).`);
