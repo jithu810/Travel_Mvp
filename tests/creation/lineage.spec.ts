@@ -8,10 +8,13 @@ async function create(request: APIRequestContext, title: string) {
   expect((await request.post('http://127.0.0.1:54329/rest/v1/rpc/save_journey', { headers, data: { payload: { id, title, destination_slug: 'goa', traveler_type: 'friends', duration_days: 1, status: 'published', stops: [{ id: crypto.randomUUID(), name: 'Coastal memory', sequence: 1, latitude: 15.49, longitude: 73.83, description: 'The original experience.', day_number: 1 }] } } })).ok()).toBe(true);
   return id;
 }
-async function remix(request: APIRequestContext, source: string, title: string, status = 'published') {
+async function remix(request: APIRequestContext, source: string, title: string, status = 'published', fields: Record<string, unknown> = {}) {
   const response = await request.post('http://127.0.0.1:54329/rest/v1/rpc/copy_journey', { headers, data: { source_id: source } });
   expect(response.ok()).toBe(true); const id = await response.json() as string;
-  await update(request, id, { title, status }); return id;
+  await update(request, id, { title, status, ...fields }); return id;
+}
+async function cover(request: APIRequestContext, id: string) {
+  return (await (await request.post('http://127.0.0.1:54329/rest/v1/rpc/get_journey_detail', { headers, data: { target_id: id } })).json()).cover_image_path as string | null;
 }
 async function update(request: APIRequestContext, id: string, fields: Record<string, unknown>) {
   const row = await (await request.post('http://127.0.0.1:54329/rest/v1/rpc/get_journey_detail', { headers, data: { target_id: id } })).json();
@@ -98,8 +101,11 @@ test('lineage sections and navigation are readable at all six required viewports
     const a = await create(request, prefix + ' original'); ids.push(a);
     await update(request, a, { cover_image_path: '/images/goa.jpg' });
     const b = await remix(request, a, prefix + ' an independent coastal story with friends'); ids.push(b);
-    const c = await remix(request, b, prefix + ' memories from our weekend'); ids.push(c);
-    for (let i = 0; i < 4; i++) ids.push(await remix(request, b, `${prefix} supporting story ${i}`));
+    expect(await cover(request, b)).toBeNull();
+    // Remixes inherit no media; each remix owner adds their own cover.
+    const own = { cover_image_path: '/images/goa.jpg' };
+    const c = await remix(request, b, prefix + ' memories from our weekend', 'published', own); ids.push(c);
+    for (let i = 0; i < 4; i++) ids.push(await remix(request, b, `${prefix} supporting story ${i}`, 'published', own));
     for (const [width, height] of [[360,800],[390,844],[412,915],[844,390],[1280,900],[1440,1000]]) {
       await page.setViewportSize({ width, height }); await page.goto(`/journey/${b}`);
       const origin = page.getByRole('region', { name: 'Journey origin' });

@@ -16,7 +16,7 @@ try {
     create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text,name text,unique(bucket_id,name));
     alter table storage.objects enable row level security;
     grant usage on schema storage to anon,authenticated; grant select on storage.objects to anon; grant select,insert,update,delete on storage.objects to authenticated;`);
-  for (const migration of ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql']) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`, import.meta.url), 'utf8'));
+  for (const migration of ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql','20261024041322_journey_media_thumbnail_v1_read.sql','20261025153306_remix_without_media.sql','20261026045508_capture_customize_stops.sql']) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`, import.meta.url), 'utf8'));
   await db.query('insert into auth.users(id) values($1),($2)', [owner, other]);
   await as('authenticated', owner);
   const a = '20000000-0000-0000-0000-000000000001';
@@ -28,7 +28,8 @@ try {
   assert.notEqual(b, a);
   const bStops = (await db.query('select * from public.journey_stops where journey_id=$1', [b])).rows;
   assert.notEqual(bStops[0].id, '30000000-0000-0000-0000-000000000001');
-  assert.equal(bStops[0].photo_path, '/images/goa.jpg');
+  assert.equal(bStops[0].photo_path, null, 'Remix stop photos start empty');
+  assert.equal((await db.query('select cover_image_path from public.journeys where id=$1', [b])).rows[0].cover_image_path, null, 'Remix cover starts empty');
   await as('anon'); assert.equal((await children(a)).length, 0, 'Draft remix is never public');
   await as('authenticated', other);
   await db.query("update public.journeys set status='published',published_at=now(),title='My remix' where id=$1", [b]);
@@ -60,11 +61,11 @@ try {
   await as('authenticated', owner); await db.query('delete from public.journeys where id=$1', [a]);
   await as('anon');
   assert.equal((await publicNode(b)).copied_from_journey_id, null);
-  assert.equal((await db.query('select cover_image_path,description,user_id from public.journeys where id=$1', [b])).rows[0].cover_image_path, '/images/goa.jpg');
-  assert.equal((await db.query('select photo_path,description from public.journey_stops where journey_id=$1', [b])).rows[0].photo_path, '/images/goa.jpg');
+  assert.equal((await db.query('select cover_image_path,description,user_id from public.journeys where id=$1', [b])).rows[0].cover_image_path, null);
+  assert.equal((await db.query('select photo_path,description from public.journey_stops where journey_id=$1', [b])).rows[0].photo_path, null);
   await as('authenticated', other); await db.query('delete from public.journeys where id=$1', [b]);
   await as('anon'); assert.equal((await publicNode(c)).copied_from_journey_id, null);
   assert.equal((await db.query('select * from public.journey_stops where journey_id=$1', [c])).rows.length, 1);
   assert.equal((await db.query('select * from public.journeys where id=$1', [c])).rows[0].user_id, owner);
-  console.log('PASS lineage SQL: public-only parent/children, draft/private source protection, multi-generation direct edges, new IDs, bidirectional edit independence, normal discovery and delete-to-NULL preserving ownership/content/photos.');
+  console.log('PASS lineage SQL: public-only parent/children, draft/private source protection, multi-generation direct edges, new IDs, bidirectional edit independence, normal discovery, remixes without inherited cover or stop photos, and delete-to-NULL preserving ownership/content.');
 } finally { await db.close(); }

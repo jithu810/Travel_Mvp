@@ -75,11 +75,11 @@ const server=http.createServer(async(request,response)=>{
     const source=journeys.get(body.source_id);
     if (!uid || source?.status!=='published') return json({ code:'42501',message:'Published only' },403);
     const id=crypto.randomUUID();
-    journeys.set(id,{ ...source,id,user_id:uid,status:'draft',published_at:null,updated_at:new Date().toISOString(),copied_from_journey_id:source.id,is_demo:false,stops:source.stops.map(s=>({ ...s,id:crypto.randomUUID() })) });
+    journeys.set(id,{ ...source,id,user_id:uid,status:'draft',published_at:null,updated_at:new Date().toISOString(),cover_image_path:null,copied_from_journey_id:source.id,is_demo:false,stops:source.stops.map(s=>({ ...s,id:crypto.randomUUID(),photo_path:null })) });
     return json(id);
   }
   if (url.pathname==='/rest/v1/journeys') {
-    let rows=[...journeys.values()].filter(j=>(!filter('id') || (filter('id').startsWith('in.(') ? filter('id').slice(4,-1).split(',').includes(j.id) : filter('id')===j.id)) && (!filter('copied_from_journey_id') || filter('copied_from_journey_id')===j.copied_from_journey_id) && (!filter('user_id') || filter('user_id')===j.user_id) && (!filter('status') || filter('status')===j.status) && (!filter('is_demo') || String(j.is_demo)===filter('is_demo')) && (!filter('traveler_type') || j.traveler_type===filter('traveler_type')) && visible(j));
+    let rows=[...journeys.values()].filter(j=>(!filter('id') || (filter('id').startsWith('in.(') ? filter('id').slice(4,-1).split(',').includes(j.id) : filter('id')===j.id)) && (!filter('copied_from_journey_id') || filter('copied_from_journey_id')===j.copied_from_journey_id) && (!filter('user_id') || (filter('user_id').startsWith('neq.') ? filter('user_id').slice(4)!==j.user_id : filter('user_id')===j.user_id)) && (!filter('status') || filter('status')===j.status) && (!filter('is_demo') || String(j.is_demo)===filter('is_demo')) && (!filter('traveler_type') || j.traveler_type===filter('traveler_type')) && visible(j));
     if (request.method==='DELETE') {
       const owned=rows.filter(j=>j.user_id===uid);
       for(const j of owned) { journeys.delete(j.id); for(const [key,t] of tracks) if(t.journey_id===j.id) tracks.delete(key); for(const set of [likes,saves]) for(const key of set) if (key.endsWith(`:${j.id}`)) set.delete(key); for(const copy of journeys.values()) if (copy.copied_from_journey_id===j.id) copy.copied_from_journey_id=null; }

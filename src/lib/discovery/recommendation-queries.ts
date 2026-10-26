@@ -6,6 +6,7 @@ import { getSupabaseConfig } from '@/lib/env';
 import { journeyIntelligence } from '@/lib/journey/journey-intelligence';
 import { isJourneyId } from '@/lib/journey/lineage';
 import { getDestination } from './destinations';
+import { discoveryViewer } from './viewer';
 import { recommendJourneys, type RecommendationFeatures } from './recommendations';
 import type { Journey } from './types';
 
@@ -15,11 +16,12 @@ export async function homeRecommendations(journeys: readonly Journey[], alreadyV
   if (!client || !getSupabaseConfig() || !journeys.length) return empty;
   let viewerId: string | null = null, savedIds: string[] = [], likedIds: string[] = [];
   try {
-    const session = await createClient();
-    const { data: { user }, error } = await session.auth.getUser();
-    if (error && error.name !== 'AuthSessionMissingError') return empty;
-    viewerId = user?.id || null;
+    // Shares Home's request-scoped auth lookup instead of a second getUser().
+    const viewer = await discoveryViewer();
+    if (viewer.failed) return empty;
+    viewerId = viewer.id;
     if (viewerId) {
+      const session = await createClient();
       const [saved, liked] = await Promise.all([
         session.from('saved_journeys').select('journey_id').eq('user_id', viewerId).order('created_at', { ascending: false }).order('journey_id').limit(20),
         session.from('journey_likes').select('journey_id').eq('user_id', viewerId).order('created_at', { ascending: false }).order('journey_id').limit(20),

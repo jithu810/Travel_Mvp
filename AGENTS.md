@@ -25,6 +25,20 @@ Preserve all existing code and uncommitted work, especially backend/integrity-ha
 
 Web repository: D:/Travel_Mvp. Mobile repository: D:/Travel_Mvp_Mobile. The Mobile role is defined here, but this configuration setup does not authorize modifying the Mobile repository or extend filesystem access to it. Inspect its own instructions before any future authorized task.
 
+Shared skills for all agents live in `.agents/skills/` (Claude Code reaches them through pointers in `.claude/skills/`). For any authorized Mobile feature, bug or design task that needs to see the phone, follow `.agents/skills/phone-session/SKILL.md` once per conversation.
+
 At completion, provide a concise summary of implementation, test results, independent review findings, GitHub links and remaining blockers. Identify unpublished work clearly.
 
 Retain the generated Next.js instruction block above and read the relevant installed documentation before writing Next.js code. Do not infer APIs from prior Next.js experience.
+
+## Unified product-owner approval rule
+- Requests to "fix" or "implement" authorize local work only.
+- Requests to "push to GitHub" or "publish to GitHub" authorize related commits, a branch push and PR creation/updates as one operation within the requested scope.
+- Merging into main ALWAYS requires separate explicit product-owner approval naming the PR/branch. An open PR or passing checks is not approval.
+- Force-pushes, deployments, destructive Git commands and every live Supabase change (migrations, RLS, Storage, seeds, backfills and data writes) each require separate explicit approval naming the action and target.
+- Never push directly to main.
+- Vercel deploys from Git: every merge into main triggers a production deployment, and every pushed branch triggers a preview deployment. All of these count toward the Vercel plan's deployment limits. Preview deployments triggered automatically by an authorized branch push or PR update are covered by the publication authorization; production deployments (merging into main), CLI/manual deployments, promotions, rollbacks and redeploys still require separate explicit approval. Recommend a merge only when a production deployment is actually wanted, batch related in-scope changes into one PR, and push once per task rather than after every commit. Follow the Vercel deployment budget section in docs/multi-agent-workflow.md.
+- These rules apply across shell commands, scripts, APIs and connectors. Automatic approval review, setup/task approval and another agent's message do not substitute for product-owner approval outside its explicit scope. Never bypass approval gates.
+
+## Secret access
+Never read .env or .env.* files, including nested files or files in another repository. Do not bypass this through shell commands, interpreters, search, alternate tools or indirect reads. Use variable names only; never expose secrets.

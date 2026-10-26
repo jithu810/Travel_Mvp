@@ -83,7 +83,11 @@ export async function getJourneys(destination?: string, traveler: TravelerFilter
 
 // Public-only parent filtering and anonymous RLS also protect embedded stops.
 // Fetch stops with their journeys, never once per stop or once per journey.
-export async function getExploreJourneys(selected: SelectedDestination | null, traveler: TravelerFilter, options: DiscoveryOptions = {}): Promise<ExploreResult> {
+// excludeUserId hides one creator's journeys (the signed-in viewer's own) at
+// the query level so the scan cap, totals and page counts stay consistent.
+export type ExploreOptions = DiscoveryOptions & { excludeUserId?: string | null };
+
+export async function getExploreJourneys(selected: SelectedDestination | null, traveler: TravelerFilter, { excludeUserId, ...options }: ExploreOptions = {}): Promise<ExploreResult> {
   const empty: ExploreResult = { journeys: [], source: 'supabase', loaded: false };
   const client = publicClient();
   if (!client) return empty;
@@ -93,6 +97,7 @@ export async function getExploreJourneys(selected: SelectedDestination | null, t
         .select('id,destination_slug,destination_name,destination_latitude,destination_longitude,published_at,journey_stops(id,name,sequence,latitude,longitude,mapbox_place_id)')
         .eq('status', 'published').eq('is_demo', false).order('published_at', { ascending: false }).order('id');
       if (traveler !== 'all') request = request.eq('traveler_type', traveler);
+      if (excludeUserId) request = request.neq('user_id', excludeUserId);
       return request;
     };
     type Row = NonNullable<Awaited<ReturnType<typeof query>>['data']>[number];

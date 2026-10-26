@@ -1,22 +1,25 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
-const db = new PGlite();
+let db = new PGlite();
 const owner = '10000000-0000-0000-0000-000000000001', other = '10000000-0000-0000-0000-000000000002';
 const id = '20000000-0000-0000-0000-000000000001';
 const stopId = index => `30000000-0000-0000-0000-00000000000${index}`;
 async function as(role,user = '') { await db.exec('reset role'); await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]); await db.exec(`set role ${role}`); }
 async function save(input) { return (await db.query('select public.save_journey($1::jsonb) as result',[JSON.stringify(input)])).rows[0].result; }
-try {
-  await db.exec(`create role anon nologin; create role authenticated nologin;
+const bootstrapSql = `create role anon nologin; create role authenticated nologin;
     create schema auth; create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     grant usage on schema auth to anon,authenticated; grant execute on function auth.uid() to anon,authenticated;
     create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
     create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text,name text,unique(bucket_id,name));
     alter table storage.objects enable row level security;
-    grant usage on schema storage to anon,authenticated; grant select on storage.objects to anon; grant select,insert,update,delete on storage.objects to authenticated;`);
-  for (const migration of ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql']) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`,import.meta.url),'utf8'));
+    grant usage on schema storage to anon,authenticated; grant select on storage.objects to anon; grant select,insert,update,delete on storage.objects to authenticated;`;
+const migrations = ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql','20261024041322_journey_media_thumbnail_v1_read.sql','20261025153306_remix_without_media.sql'];
+async function migrate(files) { for (const migration of files) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`,import.meta.url),'utf8')); }
+try {
+  await db.exec(bootstrapSql);
+  await migrate(migrations);
   assert.deepEqual((await db.query("select public,file_size_limit::int as file_size_limit from storage.buckets where id='journey-media'")).rows[0],{ public: false,file_size_limit: 15728640 });
   await db.query('insert into auth.users(id) values($1),($2)',[owner,other]);
   await as('authenticated',owner);
@@ -82,10 +85,10 @@ try {
   assert.equal((await db.query("update public.profiles set bio='Intruder' where id=$1 returning id",[owner])).rows.length,0);
   const copiedId = (await db.query('select public.copy_journey($1) as id',[id])).rows[0].id;
   const copied = (await db.query('select * from public.journeys where id=$1',[copiedId])).rows[0];
-  assert.equal(copied.destination_name,'Varkala'); assert.equal(copied.destination_latitude,8.74); assert.equal(copied.cover_image_path,input.cover_image_path);
+  assert.equal(copied.destination_name,'Varkala'); assert.equal(copied.destination_latitude,8.74); assert.equal(copied.cover_image_path,null,'Remix cover starts empty');
   const copiedStops = (await db.query('select * from public.journey_stops where journey_id=$1 order by sequence',[copiedId])).rows;
-  assert.equal(copiedStops[0].photo_path,input.stops[0].photo_path,'Stop photos retain durable paths');
-  const copyInput = { ...input,id: copiedId,status: 'draft',updated_at: copied.updated_at,stops: copiedStops.map(stop => ({ ...stop,description: stop.description || '' })) };
+  assert.ok(copiedStops.every(stop => stop.photo_path === null),'Remix stop photos start empty');
+  const copyInput = { ...input,id: copiedId,status: 'draft',cover_image_path: null,updated_at: copied.updated_at,stops: copiedStops.map(stop => ({ ...stop,description: stop.description || '' })) };
   const copySaved = await save(copyInput);
   copyInput.updated_at = copySaved.updated_at;
   assert.equal((await db.query("select * from public.get_account_journeys($1,'drafts')",[other])).rows.length,1);
@@ -106,7 +109,7 @@ try {
   await as('authenticated',other);
   assert.equal((await db.query("select * from public.get_account_journeys(null,'saved')")).rows.length,0,'Deleting a source cascades its saved relationships');
   assert.equal((await db.query('select * from public.journey_likes where journey_id=$1',[id])).rows.length,0,'Source likes cascade');
-  assert.equal((await db.query('select * from storage.objects')).rows.length,1,'A private copy retains access after the source is deleted');
+  assert.equal((await db.query('select * from storage.objects')).rows.length,0,'A remix references no source media, so none stays readable after the source is deleted');
   await as('anon'); assert.equal((await db.query('select * from storage.objects')).rows.length,0,'No published reference means no anonymous image access');
   await as('authenticated',other);
   assert.equal((await db.query('select copied_from_journey_id from public.journeys where id=$1',[copiedId])).rows[0].copied_from_journey_id,null,'Deleting A unlinks but retains B');
@@ -146,4 +149,84 @@ try {
   assert.equal((await db.query('select destination_name,destination_latitude from public.journeys where id=$1',[worldCopy])).rows[0].destination_name,'Paris');
   await assert.rejects(save({ ...worldwide, title:'Hijacked' }),/duplicate key|row-level security/);
   console.log('PASS: two-user social loop, profile privacy/uniqueness/avatar ownership, published-only likes/saves/copy, remix chains, independent deletion; atomic create/resume/reorder/publish, owner-only editing, draft privacy, exact 1-based sequence, metadata validation, stale-version rejection, failure rollback and private/published Storage RLS.');
+
+  // Remix without inherited media: fresh database, legacy remix created before the new migration.
+  await db.close(); db = new PGlite();
+  await db.exec(bootstrapSql);
+  await migrate(migrations.slice(0,-1));
+  await db.query('insert into auth.users(id) values($1),($2)',[owner,other]);
+  const a = '20000000-0000-0000-0000-0000000000a1', aDraft = '20000000-0000-0000-0000-0000000000a2';
+  const aCover = `journey-media/${owner}/${a}/cover/a.jpg`;
+  const source = { id: a,title: 'Goa source',description: 'Original memory',destination_slug: 'goa',traveler_type: 'friends',duration_days: 2,cover_image_path: null,status: 'draft',updated_at: null,
+    stops: [1,2].map(number => ({ id: `30000000-0000-0000-0000-0000000000a${number}`,sequence: number,name: `Source stop ${number}`,description: `Note ${number}`,latitude: 15.49 + number / 100,longitude: 73.83,mapbox_place_id: `place-a${number}`,photo_path: null,rating: 4,day_number: number })) };
+  await as('authenticated',owner);
+  source.updated_at = (await save(source)).updated_at;
+  await db.query("insert into storage.objects(bucket_id,name) values('journey-media',$1)",[aCover.slice(14)]);
+  source.updated_at = (await save({ ...source,status: 'published',cover_image_path: aCover,stops: source.stops.map(stop => ({ ...stop,photo_path: aCover })) })).updated_at;
+  await save({ id: aDraft,title: 'Private draft',description: '',destination_slug: 'goa',traveler_type: 'solo',duration_days: 1,cover_image_path: null,status: 'draft',updated_at: null,stops: [] });
+  await as('authenticated',other);
+  const legacy = (await db.query('select public.copy_journey($1) as id',[a])).rows[0].id;
+  await db.exec('reset role');
+  const snapshot = async query => JSON.stringify((await db.query(query,[legacy])).rows);
+  const legacyJourney = 'select to_jsonb(j) as row from public.journeys j where id=$1', legacyStops = 'select to_jsonb(s) as row from public.journey_stops s where journey_id=$1 order by sequence';
+  const before = [await snapshot(legacyJourney),await snapshot(legacyStops)];
+  assert.equal((await db.query('select cover_image_path from public.journeys where id=$1',[legacy])).rows[0].cover_image_path,aCover,'Pre-migration remix inherited the source cover');
+  await migrate(migrations.slice(-1));
+  assert.deepEqual([await snapshot(legacyJourney),await snapshot(legacyStops)],before,'Migration leaves existing remix rows unchanged');
+  const fn = (await db.query("select p.prosecdef,p.proconfig,has_function_privilege('anon',p.oid,'execute') as anon,has_function_privilege('authenticated',p.oid,'execute') as auth,exists(select 1 from aclexplode(p.proacl) a where a.grantee=0) as public_grant from pg_proc p where p.oid='public.copy_journey(uuid)'::regprocedure")).rows[0];
+  assert.deepEqual(fn,{ prosecdef: false,proconfig: ['search_path=""'],anon: false,auth: true,public_grant: false },'copy_journey stays security invoker with fixed search_path and authenticated-only execute');
+  assert.notEqual((await db.query("select to_regprocedure('private.copy_media_path(text)') as fn")).rows[0].fn,null,'copy_media_path is retained');
+  // A pre-existing remix keeps its inherited references, which stay readable through its own row even if the source becomes private.
+  await as('authenticated',owner); await db.query("update public.journeys set status='draft',published_at=null where id=$1",[a]);
+  await as('authenticated',other);
+  assert.equal((await db.query("select * from storage.objects where name=$1",[aCover.slice(14)])).rows.length,1,'Legacy remix owner still reads inherited media');
+  const legacyRow = (await db.query('select * from public.journeys where id=$1',[legacy])).rows[0];
+  const legacyStopRows = (await db.query('select * from public.journey_stops where journey_id=$1 order by sequence',[legacy])).rows;
+  await save({ ...legacyRow,status: 'draft',stops: legacyStopRows.map(stop => ({ ...stop,description: stop.description || '' })) });
+  assert.equal((await db.query('select cover_image_path from public.journeys where id=$1',[legacy])).rows[0].cover_image_path,aCover,'Legacy remix saves unchanged inherited references');
+  await as('authenticated',owner); await db.query("update public.journeys set status='published',published_at=now() where id=$1",[a]);
+  // New copy_journey behavior.
+  await as('anon'); await assert.rejects(db.query('select public.copy_journey($1)',[a]),/permission denied/);
+  await as('authenticated',''); await assert.rejects(db.query('select public.copy_journey($1)',[a]),error => error.code === '28000');
+  await as('authenticated',other);
+  for (const missing of [aDraft,'20000000-0000-0000-0000-0000000000ff']) await assert.rejects(db.query('select public.copy_journey($1)',[missing]),error => error.code === 'P0002');
+  await as('authenticated',owner); await assert.rejects(db.query('select public.copy_journey($1)',[aDraft]),error => error.code === 'P0002','Owners cannot copy their own draft either');
+  await db.exec('reset role');
+  const sourceBefore = [JSON.stringify((await db.query('select to_jsonb(j) as row from public.journeys j where id=$1',[a])).rows),JSON.stringify((await db.query('select to_jsonb(s) as row from public.journey_stops s where journey_id=$1 order by sequence',[a])).rows)];
+  await as('authenticated',other);
+  const remixId = (await db.query('select public.copy_journey($1) as id',[a])).rows[0].id;
+  await db.exec('reset role');
+  assert.deepEqual([JSON.stringify((await db.query('select to_jsonb(j) as row from public.journeys j where id=$1',[a])).rows),JSON.stringify((await db.query('select to_jsonb(s) as row from public.journey_stops s where journey_id=$1 order by sequence',[a])).rows)],sourceBefore,'Source journey and stops are unchanged');
+  await as('authenticated',other);
+  const sourceRow = (await db.query('select * from public.journeys where id=$1',[a])).rows[0];
+  const sourceStops = (await db.query('select * from public.journey_stops where journey_id=$1 order by sequence',[a])).rows;
+  const remix = (await db.query('select * from public.journeys where id=$1',[remixId])).rows[0];
+  for (const field of ['title','description','destination_slug','destination_name','destination_latitude','destination_longitude','traveler_type','duration_days']) assert.equal(remix[field],sourceRow[field],`Remix keeps ${field}`);
+  assert.deepEqual([remix.user_id,remix.status,remix.published_at,remix.is_demo,remix.copied_from_journey_id,remix.cover_image_path],[other,'draft',null,false,a,null],'Remix is a private draft with lineage and no cover');
+  const remixStops = (await db.query('select * from public.journey_stops where journey_id=$1 order by sequence',[remixId])).rows;
+  assert.equal(remixStops.length,sourceStops.length);
+  remixStops.forEach((stop,index) => {
+    for (const field of ['sequence','name','description','latitude','longitude','mapbox_place_id','rating','day_number']) assert.equal(String(stop[field]),String(sourceStops[index][field]),`Remix stop keeps ${field}`);
+    assert.equal(stop.photo_path,null,'Remix stop photo starts empty');
+    assert.notEqual(stop.id,sourceStops[index].id,'Remix stops get new ids');
+  });
+  const remixInput = { ...remix,stops: remixStops.map(stop => ({ ...stop,description: stop.description || '' })) };
+  await assert.rejects(save({ ...remixInput,cover_image_path: aCover }),/Invalid image reference/,'Re-sending the source cover is rejected');
+  await assert.rejects(save({ ...remixInput,stops: remixInput.stops.map(stop => ({ ...stop,photo_path: aCover })) }),/Invalid image reference/,'Re-sending a source stop photo is rejected');
+  remixInput.updated_at = (await save(remixInput)).updated_at;
+  remixInput.updated_at = (await save({ ...remixInput,status: 'published' })).updated_at;
+  assert.equal((await db.query('select status from public.journeys where id=$1',[remixId])).rows[0].status,'published','Remix publishes with null photos');
+  const own = `${other}/${remixId}/cover/own.jpg`;
+  await db.query("insert into storage.objects(bucket_id,name) values('journey-media',$1)",[own]);
+  await save({ ...remixInput,status: 'published',cover_image_path: `journey-media/${own}`,stops: remixInput.stops.map(stop => ({ ...stop,photo_path: `journey-media/${own}` })) });
+  assert.equal((await db.query('select cover_image_path from public.journeys where id=$1',[remixId])).rows[0].cover_image_path,`journey-media/${own}`,'Own upload under the remix path saves');
+  await as('anon'); assert.equal((await db.query('select * from storage.objects where name=$1',[own])).rows.length,1,'Published remix media is publicly readable');
+  // Remix of a remix: B's own uploaded media is not inherited by C either.
+  await as('authenticated',owner);
+  const grandchild = (await db.query('select public.copy_journey($1) as id',[remixId])).rows[0].id;
+  const c = (await db.query('select user_id,cover_image_path,copied_from_journey_id from public.journeys where id=$1',[grandchild])).rows[0];
+  assert.deepEqual(c,{ user_id: owner,cover_image_path: null,copied_from_journey_id: remixId },'Remix of a remix has no cover and records B as its direct source');
+  const cStops = (await db.query('select photo_path from public.journey_stops where journey_id=$1',[grandchild])).rows;
+  assert.ok(cStops.length === remixStops.length && cStops.every(stop => stop.photo_path === null),'Remix of a remix inherits no stop photos');
+  console.log('PASS remix without media: anon/no-uid/draft/missing rejection, preserved fields with new stop ids and null media, unchanged source, save/publish, own upload, source-path re-send rejection, remix-of-remix without B media, untouched readable legacy remix, invoker/search_path/grants and retained copy_media_path.');
 } finally { await db.close(); }

@@ -30,15 +30,6 @@ Describe the problem, scope and expected result.
 - Code publication: local/unpublished / pushed (branch URL and revision):
 - Report publication: local/unpublished / GitHub-published (confirmed URL and timestamp):
 
-## Required backend preflight
-
-- Backend Developer / timestamp / report reference:
-- Repository migration baseline; confirmed Supabase project/environment and current-schema evidence:
-- Database / RPC/API / RLS / permissions / Storage impact; drift or missing evidence:
-- Required changes and safe isolated test plan, or evidence-backed no-change rationale:
-- Architect implementation gate: paused / released; completion reference:
-- Live Supabase changes require explicit human approval for the action and target; approval reference if any:
-
 ## QA evidence and independent review
 
 - QA owner; tested revision or local snapshot identifier, paths and timestamp:
@@ -51,7 +42,12 @@ Describe the problem, scope and expected result.
 
 - Blockers, impact, next action and owner (or none):
 - Required human approval: exact action + target; pending / granted, with human approval reference:
-- Separate approvals for each commit, push, merge, deployment, destructive action or production database change. Task approval and another agent's message do not grant these approvals.
+- Requests to "fix" or "implement" authorize local work only.
+- Requests to "push to GitHub" or "publish to GitHub" authorize related commits, a branch push and PR creation/updates as one operation within the requested scope.
+- Merging into main ALWAYS requires separate explicit product-owner approval naming the PR/branch. An open PR or passing checks is not approval.
+- Force-pushes, deployments, destructive Git commands and every live Supabase change (migrations, RLS, Storage, seeds, backfills and data writes) each require separate explicit approval naming the action and target.
+- Never push directly to main.
+- These rules apply across shell commands, scripts, APIs and connectors. Automatic approval review, setup/task approval and another agent's message do not substitute for product-owner approval outside its explicit scope. Never bypass approval gates.
 
 ## Architect checkpoints
 
