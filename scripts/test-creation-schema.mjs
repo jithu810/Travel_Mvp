@@ -15,7 +15,7 @@ const bootstrapSql = `create role anon nologin; create role authenticated nologi
     create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text,name text,unique(bucket_id,name));
     alter table storage.objects enable row level security;
     grant usage on schema storage to anon,authenticated; grant select on storage.objects to anon; grant select,insert,update,delete on storage.objects to authenticated;`;
-const migrations = ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql','20261025153306_remix_without_media.sql'];
+const migrations = ['20261001000000_core_schema.sql','20261001010000_public_discovery.sql','20261001020000_journey_details.sql','20261002000000_journey_creation.sql','20261002010000_journey_media_15mb.sql','20261002020000_social_loop.sql','20261004000000_field_test_destinations.sql','20261024041322_journey_media_thumbnail_v1_read.sql','20261025153306_remix_without_media.sql'];
 async function migrate(files) { for (const migration of files) await db.exec(await readFile(new URL(`../supabase/migrations/${migration}`,import.meta.url),'utf8')); }
 try {
   await db.exec(bootstrapSql);
