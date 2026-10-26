@@ -14,15 +14,30 @@ export function demoId(id) {
 export function generateSeed(samples, owner) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(owner || "")) throw new Error("Pass an existing Supabase Auth user UUID: npm run seed:demo -- <owner-uuid>");
   const quote = (value) => `'${value.replaceAll("'", "''")}'`;
-  let sql = `-- Journey demo data. Generated locally; review before applying in SQL Editor.\n-- Requires both migrations and an existing dedicated demo Auth user.\nbegin;\n\ndo $$ begin\n  if not exists (select 1 from public.profiles where id = '${owner}') then\n    raise exception 'Demo owner must have an existing profile';\n  end if;\nend $$;\n`;
+  let sql = `-- Journey demo data. Generated locally; review before applying in SQL Editor.\n-- Requires the current migrations and an existing dedicated demo Auth user.\nbegin;\n\ndo $$ begin\n  if not exists (select 1 from public.profiles where id = '${owner}') then\n    raise exception 'Demo owner must have an existing profile';\n  end if;\nend $$;\n`;
   for (const sample of samples) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(sample.destination)) throw new Error("Invalid demo destination");
     const id = demoId(sample.id);
     sql += `\ninsert into public.journeys (id, user_id, title, description, destination_slug, traveler_type, duration_days, status, published_at, cover_image_path, is_demo)\nvalues ('${id}', '${owner}', ${quote(sample.title)}, ${quote(sample.description)}, ${quote(sample.destination)}, ${quote(sample.traveler)}, ${sample.days}, 'published', '2026-10-01T00:00:00Z', '/images/${sample.destination}.jpg', true)\non conflict (id) do nothing;\n`;
+    sql += `do $$ begin
+  if exists(select 1 from public.journey_stops where journey_id = '${id}' and sequence = 0) then
+    raise exception 'Review legacy zero-based demo stops before reseeding';
+  end if;
+end $$;\n`;
     // Never overwrite an existing record owned by somebody else.
     for (const [sequence, name] of sample.stops.entries()) {
       const [longitude, latitude] = coordinates[name] || [null, null];
-      sql += `insert into public.journey_stops (journey_id, sequence, name, description, longitude, latitude)\nselect '${id}', ${sequence}, ${quote(name)}, ${quote(descriptions[name] || "An example stop on this sample route.")}, ${longitude ?? "null"}, ${latitude ?? "null"}\nwhere exists (select 1 from public.journeys where id = '${id}' and user_id = '${owner}' and is_demo)\non conflict (journey_id, sequence) do update set longitude = coalesce(public.journey_stops.longitude, excluded.longitude), latitude = coalesce(public.journey_stops.latitude, excluded.latitude);\n`;
+      sql += `insert into public.journey_stops (journey_id, sequence, name, description, longitude, latitude)\nselect '${id}', ${sequence + 1}, ${quote(name)}, ${quote(descriptions[name] || "An example stop on this sample route.")}, ${longitude ?? "null"}, ${latitude ?? "null"}\nwhere exists (select 1 from public.journeys where id = '${id}' and user_id = '${owner}' and is_demo)\non conflict (journey_id, sequence) do update set longitude = coalesce(public.journey_stops.longitude, excluded.longitude), latitude = coalesce(public.journey_stops.latitude, excluded.latitude);\n`;
     }
+    // Authorize only the known repository asset, never arbitrary stored paths.
+    sql += `do $$ begin
+  if to_regclass('private.journey_media_authorizations') is not null then
+    insert into private.journey_media_authorizations(journey_id,media_path)
+      select id,cover_image_path from public.journeys
+      where id='${id}' and user_id='${owner}' and is_demo and cover_image_path='/images/${sample.destination}.jpg'
+      on conflict do nothing;
+  end if;
+end $$;\n`;
   }
   return sql + "\ncommit;\n";
 }
@@ -31,5 +46,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const samples = JSON.parse(await readFile(new URL("../src/lib/discovery/demo-journeys.json", import.meta.url), "utf8"));
   const path = new URL("../supabase/demo-seed.generated.sql", import.meta.url);
   await writeFile(path, generateSeed(samples, process.argv[2]));
-  console.log("Created supabase/demo-seed.generated.sql for all three migrations. Review it, then apply it in Supabase SQL Editor. Demo coordinates are approximate. No remote database was modified.");
+  console.log("Created supabase/demo-seed.generated.sql for the current migration chain. Review it, then apply it in Supabase SQL Editor. Demo coordinates are approximate. No remote database was modified.");
 }

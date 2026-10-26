@@ -149,9 +149,9 @@ try {
   assert.equal(detail.creator_name, "Asha");
   assert.equal(detail.creator_username, "asha");
   assert.equal(detail.bio, undefined);
-  assert.deepEqual(detail.stops.map((stop) => stop.sequence), [0, 1, 2, 3]);
-  assert.equal(detail.stops[1].day_number, 2);
-  assert.equal(detail.stops[1].rating, 4.5);
+  assert.deepEqual(detail.stops.map((stop) => stop.sequence), [1, 2, 3, 4]);
+  assert.equal(detail.stops[0].day_number, 2);
+  assert.equal(detail.stops[0].rating, 4.5);
   assert.equal((await db.query("select public.get_journey_detail($1) as detail", [otherDraft])).rows[0].detail, null);
   await denied("select public.copy_journey($1)", [sourceId]);
 
