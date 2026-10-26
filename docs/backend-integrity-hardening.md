@@ -79,13 +79,27 @@ owner, the journey_rpc-owned `save_journey`, `copy_journey` and
 The helper is SECURITY DEFINER with an empty search_path, stays owned by the migration
 role and is executable only by journey_rpc. The journey_rpc policies use it too.
 Client-facing policies keep `auth.uid()`: stored policy expressions need only EXECUTE
-on it (granted to PUBLIC), not schema USAGE. Activation aborts if the helper's owner,
-definition or ACL drifts, or if any of the three bodies names `auth.uid()`. It then
+on it (granted to PUBLIC), not schema USAGE.
+
+Activation first requires `current_user` to be the owner of `public.journeys` (live:
+`postgres`), before any DDL. A different role, including a superuser such as
+`supabase_admin` used by a connector, is refused, so later `postgres` migrations can
+always alter the new role, functions and grants. Activation also aborts if the
+helper's owner, definition or ACL drifts, or if any journey_rpc-owned function names
+`auth.uid()`, including quoted or spaced spellings such as `"auth"."uid"(`. It then
 smoke-tests the final functions as anon and authenticated, so a permission error aborts
-the transaction. `scripts/test-integrity-live-acl.mjs` applies the migration as a
-non-superuser migrator with live-like auth/Storage ownership. It shows that the
-previous pattern committed with a warning and then failed with 42501 "permission
-denied for schema auth", and that the fixed version works.
+the transaction. The smoke test is deliberately write-free: it calls
+`journey_media_readable` and stops `save_journey` and `copy_journey` at their input and
+identity checks. It therefore does not exercise the journey_rpc INSERT/DELETE policies
+or Storage reads as journey_rpc. The offline `scripts/test-integrity-live-acl.mjs`
+covers those through real saves, copies and upload attachments.
+
+`scripts/test-integrity-live-acl.mjs` applies the migration as a non-superuser
+migrator with live-like auth/Storage ownership. It shows that the previous pattern
+committed with a warning and then failed with 42501 "permission denied for schema
+auth", and that the fixed version works. Its migrator matches read-only live checks
+(2026-10-26): `postgres` is the database owner, a member of anon and authenticated
+with INHERIT and SET, and has CREATE WITH GRANT OPTION on `public` and `private`.
 
 RLS remains enabled for the execution role. Its journey UPDATE USING condition
 also admits published sources because PostgreSQL row-locking SELECT needs UPDATE
@@ -135,8 +149,17 @@ Save locks the parent FOR UPDATE before comparing the submitted timestamptz.
 Every parent UPDATE uses `greatest(clock_timestamp(), OLD.updated_at + 1 microsecond)`.
 This also handles lineage clearing, repeated saves in one transaction and a clock
 behind the previous version. Nonfinite legacy versions block activation. Clients
-must preserve the returned timestamp string exactly, including microseconds;
-no JSON shape, signature or Mobile contract changes are required.
+must preserve the returned timestamp string exactly, including microseconds.
+
+The RPC JSON shapes and signatures are unchanged, but the client contract is
+stricter, and Web and Mobile clients must follow it:
+
+- Direct client INSERT/UPDATE on `journeys` and `journey_stops`, and DELETE on
+  `journey_stops`, are revoked and fail with 42501. Only owner DELETE of a whole
+  journey remains direct; every other write goes through `save_journey`/`copy_journey`.
+- `save_journey` requires `updated_at` to equal the stored version exactly for an
+  existing journey, and `null` for a new journey. A non-null `updated_at` with no
+  existing owned row (for example after deletion) returns 40001.
 
 A non-null submitted version with no owned parent raises 40001 instead of
 recreating a deleted journey. Concurrent first creates with the same UUID still

@@ -7,8 +7,10 @@ import { migrationDirectory } from './lib/offline-db.mjs';
 // Isolated in-memory PGlite only: no environment files, sockets or hosted database.
 //
 // Modelled on the live project (read-only catalog evidence, 2026-10-26):
-// - "mig" plays live `postgres`: NOSUPERUSER, CREATEROLE, BYPASSRLS, member of anon/
-//   authenticated/service_role, owner of the database, schema private and app objects.
+// - "mig" plays live `postgres`: NOSUPERUSER, CREATEROLE, BYPASSRLS, member of anon and
+//   authenticated with INHERIT and SET (also of service_role), owner of the database,
+//   schema private and app objects; CREATE WITH GRANT OPTION on public and private.
+// - supabase_admin is a superuser (it must not be the activating role).
 // - schema auth is owned by supabase_admin; mig has USAGE WITHOUT grant option.
 // - auth.uid() is owned by supabase_auth_admin and executable by PUBLIC.
 // - storage.objects is owned by supabase_storage_admin (mig is not a member); mig has
@@ -23,10 +25,11 @@ import { migrationDirectory } from './lib/offline-db.mjs';
 // save_journey/copy_journey/journey_media_readable (owned by journey_rpc, bodies parsed as
 // journey_rpc) failed with 42501 "permission denied for schema auth". Reproduced below.
 const fixture = `
-create role supabase_admin nologin; create role supabase_auth_admin nologin; create role supabase_storage_admin nologin;
+create role supabase_admin nologin superuser; create role supabase_auth_admin nologin; create role supabase_storage_admin nologin;
 create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
 create role mig nologin nosuperuser createrole bypassrls;
-grant anon, authenticated, service_role to mig;
+grant anon, authenticated to mig with inherit true, set true;
+grant service_role to mig;
 do $db$ begin execute format('alter database %I owner to mig', current_database()); end $db$;
 create schema auth authorization supabase_admin;
 grant all on schema auth to supabase_auth_admin;
@@ -83,8 +86,16 @@ async function liveDb() {
   insert into auth.users(id) values('${A}'),('${B}');`);
   const facts = (await db.query(`select (select rolsuper from pg_roles where rolname='mig') as su,
     has_schema_privilege('mig','auth','USAGE WITH GRANT OPTION') as auth_grantable,
-    pg_has_role('mig','supabase_storage_admin','MEMBER') as storage_owner`)).rows[0];
-  assert.deepEqual(facts, { su: false, auth_grantable: false, storage_owner: false }, 'Live-like migrator');
+    pg_has_role('mig','supabase_storage_admin','MEMBER') as storage_owner,
+    (select pg_get_userbyid(datdba) from pg_database where datname=current_database()) as db_owner,
+    pg_has_role('mig','anon','SET') and pg_has_role('mig','anon','USAGE') as anon_set_inherit,
+    pg_has_role('mig','authenticated','SET') and pg_has_role('mig','authenticated','USAGE') as authenticated_set_inherit,
+    has_schema_privilege('mig','public','CREATE WITH GRANT OPTION') as public_create,
+    has_schema_privilege('mig','private','CREATE WITH GRANT OPTION') as private_create,
+    pg_get_userbyid((select relowner from pg_class where oid='public.journeys'::regclass)) as journeys_owner`)).rows[0];
+  assert.deepEqual(facts, { su: false, auth_grantable: false, storage_owner: false, db_owner: 'mig',
+    anon_set_inherit: true, authenticated_set_inherit: true, public_create: true, private_create: true,
+    journeys_owner: 'mig' }, 'Live-like migrator');
   await db.exec('set role mig');
   await db.exec(await text(LEGACY));
   return db;
@@ -143,6 +154,17 @@ assert.notEqual(ed3038f, hardeningSql);
   const result = await activate(db, oldPattern(hardeningSql));
   assert.equal(result.ok, false); assert.equal(result.error.code, '42501');
   assert.match(result.error.message, /permission denied for schema auth/); checks++;
+  assert.equal((await db.query("select count(*)::int as n from pg_roles where rolname='journey_rpc'")).rows[0].n, 0, 'Atomic');
+  await db.close();
+}
+// 2b. A different (even superuser) role, e.g. supabase_admin via a connector, is refused
+// before any DDL, so later postgres migrations can always alter the new objects.
+{
+  const db = await liveDb();
+  await db.exec('reset role; set role supabase_admin');
+  const result = await activate(db, hardeningSql);
+  assert.equal(result.ok, false);
+  assert.match(result.error.message, /Run this migration as the owner of public\.journeys \(live: postgres\), not supabase_admin/); checks++;
   assert.equal((await db.query("select count(*)::int as n from pg_roles where rolname='journey_rpc'")).rows[0].n, 0, 'Atomic');
   await db.close();
 }
@@ -205,5 +227,5 @@ try {
   await rejects(db.query('update public.journeys set title=$1 where id=$2', ['x', jid(1)]), '42501');
   await as(db, 'authenticated', B);
   await rejects(db.query('select private.journey_rpc_uid()'), '42501');
-  console.log(`PASS live-like ACLs: ed3038f pattern warns, commits and fails 42501 at run time; the smoke test aborts it atomically; fixed hardening applied by a non-superuser migrator saves, copies, attaches own uploads, serves published photos to other users and anon, rejects foreign paths and blocks anon (${checks} checks).`);
+  console.log(`PASS live-like ACLs: ed3038f pattern warns, commits and fails 42501 at run time; the smoke test aborts it atomically; activation by another role (supabase_admin) is refused; fixed hardening applied by a non-superuser migrator saves, copies, attaches own uploads, serves published photos to other users and anon, rejects foreign paths and blocks anon (${checks} checks).`);
 } finally { await db.close(); }

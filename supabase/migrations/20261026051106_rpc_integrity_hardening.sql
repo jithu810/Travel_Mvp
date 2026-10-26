@@ -1,6 +1,14 @@
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '5min';
+-- Fail fast unless run by the application-table owner (live: postgres), as the
+-- customize-stops capture's installer. New roles, functions and grants must belong to
+-- that role so later migrations can alter them (e.g. not supabase_admin via a connector).
+do $$ begin
+  if current_user is distinct from (select pg_get_userbyid(relowner) from pg_class where oid = 'public.journeys'::regclass) then
+    raise exception 'Run this migration as the owner of public.journeys (live: postgres), not %', current_user;
+  end if;
+end $$;
 -- Freeze client writes before inventory verification and capability seeding.
 lock table public.journeys, public.journey_stops in share row exclusive mode;
 
@@ -423,9 +431,10 @@ do $$ begin
       or not has_function_privilege('journey_rpc', 'private.journey_rpc_uid()', 'EXECUTE') then
       raise exception 'Identity helper drift: private.journey_rpc_uid ownership, definition or ACL';
     end if;
-    if exists(select 1 from pg_proc where oid in ('public.save_journey(jsonb)'::regprocedure,
-        'public.copy_journey(uuid)'::regprocedure, 'private.journey_media_readable(text)'::regprocedure)
-        and pg_get_functiondef(oid) ~* 'auth\s*\.\s*uid\s*\(') then
+    -- Every journey_rpc-owned function; also quoted spellings such as "auth"."uid"(.
+    -- \m (word start) keeps names like journey_rpc_uid( or xauth.uid( from matching.
+    if exists(select 1 from pg_proc where proowner = 'journey_rpc'::regrole and prokind = 'f'
+        and pg_get_functiondef(oid) ~* '"?\mauth"?\s*\.\s*"?uid"?\s*\(') then
       raise exception 'Execution-role functions must use private.journey_rpc_uid(), not auth.uid()';
     end if;
     -- Smoke test as the client roles, against the final journey_rpc-owned functions.

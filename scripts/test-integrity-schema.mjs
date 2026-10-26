@@ -51,9 +51,12 @@ try {
       has_function_privilege('authenticated',oid,'EXECUTE') as authenticated
     from pg_proc where oid='private.journey_rpc_uid()'::regprocedure`)).rows[0],
     { owner:'postgres',prosecdef:true,proconfig:['search_path=""'],rpc:true,anon:false,authenticated:false });
-  assert.equal((await db.query(`select count(*)::int as n from pg_proc where oid in ('public.save_journey(jsonb)'::regprocedure,
-    'public.copy_journey(uuid)'::regprocedure,'private.journey_media_readable(text)'::regprocedure)
-    and pg_get_functiondef(oid) ~ 'auth\\.uid\\('`)).rows[0].n,0,'Execution-role bodies use the identity helper');
+  // Same scan as the activation gate: every journey_rpc-owned function, quoted spellings too.
+  assert.deepEqual((await db.query(`select array_agg(oid::regprocedure::text order by oid::regprocedure::text) as owned,
+      count(*) filter (where pg_get_functiondef(oid) ~* '"?\\mauth"?\\s*\\.\\s*"?uid"?\\s*\\(')::int as direct
+    from pg_proc where proowner='journey_rpc'::regrole`)).rows[0],
+    { owned:['copy_journey(uuid)','private.journey_media_readable(text)','save_journey(jsonb)'],direct:0 },
+    'Execution-role bodies use the identity helper');
   assert.equal((await db.query(`select count(*)::int as n from pg_proc p join pg_roles r on r.oid=p.proowner
     where p.oid in ('public.save_journey(jsonb)'::regprocedure,'public.copy_journey(uuid)'::regprocedure)
       and r.rolname='journey_rpc' and p.prosecdef and p.proconfig @> array['search_path=""']`)).rows[0].n, 2);
@@ -415,4 +418,16 @@ const widenedHelper=hardeningSql.replace('grant execute on function private.jour
   'grant execute on function private.journey_rpc_uid() to journey_rpc, authenticated;');
 assert.notEqual(widenedHelper,hardeningSql);
 await hardeningRejects(null,/Identity helper drift/,widenedHelper);
+// Quoted spellings are caught, in the three RPCs and in any other journey_rpc-owned function.
+const quotedUid=hardeningSql.replace('uid uuid := (select private.journey_rpc_uid());','uid uuid := (select "auth"."uid"());');
+assert.notEqual(quotedUid,hardeningSql);
+await hardeningRejects(null,/must use private\.journey_rpc_uid\(\), not auth\.uid\(\)/,quotedUid);
+const extraOwned=hardeningSql.replace('alter function private.journey_media_readable(text) owner to journey_rpc;',
+  `alter function private.journey_media_readable(text) owner to journey_rpc;
+create function private.extra_rpc_probe() returns uuid language plpgsql stable as $f$ begin return "AUTH" . "UID" (); end $f$;
+alter function private.extra_rpc_probe() owner to journey_rpc;`);
+assert.notEqual(extraOwned,hardeningSql);
+await hardeningRejects(null,/must use private\.journey_rpc_uid\(\), not auth\.uid\(\)/,extraOwned);
+// Only the application-table owner (live: postgres) may activate, e.g. not supabase_admin.
+await hardeningRejects('create role other_admin nologin superuser; set role other_admin;',/Run this migration as the owner of public\.journeys/);
 console.log(`PASS: activation allowlist accepts only the recorded live customize-stops/thumbnail policies and the postcondition guard rejects media-copying copy paths (${checks} checks).`);
