@@ -299,21 +299,8 @@ revoke all on function public.save_journey(jsonb) from public,anon;
 grant execute on function public.save_journey(jsonb) to authenticated;
 
 
-create function private.copy_authorized_media(source_id uuid, media text) returns text
-language sql stable security invoker set search_path = '' as $$
-  select case when media is not null and exists (
-    select 1 from private.journey_media_authorizations a join public.journeys j on j.id = a.journey_id
-    where a.journey_id = source_id and a.media_path = media and j.status = 'published'
-      and (j.cover_image_path = media or exists(select 1 from public.journey_stops s
-        where s.journey_id = source_id and s.photo_path = media))) then
-    case when starts_with(media,'journey-media/') then
-      case when exists(select 1 from storage.objects where bucket_id = 'journey-media' and name = substr(media,15)) then media end
-    when media ~ '^/images/[^?#]+$' then media
-    when media ~ '^https://' and media !~* '/storage/|/object/|[?#]|@' then media end
-  end;
-$$;
-revoke all on function private.copy_authorized_media(uuid,text) from public, anon, authenticated;
-grant execute on function private.copy_authorized_media(uuid,text) to journey_rpc;
+-- Remixes never copy the source author's media (20261025153306_remix_without_media):
+-- copy_journey stores NULL cover/stop photos, so no media capability is copied either.
 -- Retire the formerly client-callable existence helper.
 revoke all on function private.copy_media_path(text) from public, anon, authenticated;
 create or replace function public.copy_journey(source_id uuid)
@@ -328,14 +315,11 @@ begin
     into source from public.journeys j where j.id = source_id and j.status = 'published';
   if not found then raise exception 'Journey not found' using errcode = 'P0002'; end if;
   insert into public.journeys(user_id,title,description,destination_slug,destination_name,destination_latitude,destination_longitude,traveler_type,duration_days,cover_image_path,is_demo,copied_from_journey_id)
-    values((select auth.uid()),source->>'title',source->>'description',source->>'destination_slug',source->>'destination_name',(source->>'destination_latitude')::double precision,(source->>'destination_longitude')::double precision,source->>'traveler_type',(source->>'duration_days')::integer,private.copy_authorized_media(source_id,source->>'cover_image_path'),false,source_id)
+    values((select auth.uid()),source->>'title',source->>'description',source->>'destination_slug',source->>'destination_name',(source->>'destination_latitude')::double precision,(source->>'destination_longitude')::double precision,source->>'traveler_type',(source->>'duration_days')::integer,null,false,source_id)
     returning id into new_id;
   insert into public.journey_stops(journey_id,sequence,name,description,latitude,longitude,mapbox_place_id,photo_path,rating,day_number)
-    select new_id,sequence,name,description,latitude,longitude,mapbox_place_id,private.copy_authorized_media(source_id,photo_path),rating,day_number
-    from jsonb_to_recordset(source->'stops') as s(sequence integer,name text,description text,latitude double precision,longitude double precision,mapbox_place_id text,photo_path text,rating numeric,day_number integer) order by sequence;
-  insert into private.journey_media_authorizations(journey_id,media_path)
-    select new_id, cover_image_path from public.journeys where id = new_id and cover_image_path is not null
-    union select new_id, photo_path from public.journey_stops where journey_id = new_id and photo_path is not null;
+    select new_id,sequence,name,description,latitude,longitude,mapbox_place_id,null,rating,day_number
+    from jsonb_to_recordset(source->'stops') as s(sequence integer,name text,description text,latitude double precision,longitude double precision,mapbox_place_id text,rating numeric,day_number integer) order by sequence;
   -- Apply the same complete validation as save, including legacy source bounds.
   perform public.save_journey(to_jsonb(j) || jsonb_build_object('stops', coalesce((
     select jsonb_agg(to_jsonb(s) order by s.sequence) from public.journey_stops s where s.journey_id = new_id), '[]'::jsonb)))
@@ -354,7 +338,6 @@ $$;
 grant create on schema public, private to journey_rpc;
 alter function public.save_journey(jsonb) owner to journey_rpc;
 alter function public.copy_journey(uuid) owner to journey_rpc;
-alter function private.copy_authorized_media(uuid,text) owner to journey_rpc;
 alter function private.journey_media_readable(text) owner to journey_rpc;
 revoke create on schema public, private from journey_rpc;
 revoke all on function public.save_journey(jsonb), public.copy_journey(uuid) from public, anon;
@@ -370,14 +353,30 @@ do $$ begin
         and r.rolname in ('anon','authenticated','journey_rpc')) then
     raise exception 'Unexpected RLS bypass or table ownership: audit backend roles';
   end if;
+  -- Also allowed: the recorded live Customize Stops policies (20261026045508, only for
+  -- customize_stops_rpc) and the recorded live thumbnail read policy (20261024041322).
   if exists(select 1 from pg_policies where
     (schemaname='public' and tablename='journeys' and policyname not in
-      ('journeys_read','journeys_delete_own','journeys_rpc_read','journeys_rpc_insert','journeys_rpc_update'))
+      ('journeys_read','journeys_delete_own','journeys_rpc_read','journeys_rpc_insert','journeys_rpc_update',
+       'standalone_copy_read','standalone_copy_insert','standalone_copy_lock'))
     or (schemaname='public' and tablename='journey_stops' and policyname not in
-      ('journey_stops_read','stops_rpc_read','stops_rpc_insert','stops_rpc_delete'))
+      ('journey_stops_read','stops_rpc_read','stops_rpc_insert','stops_rpc_delete',
+       'standalone_copy_stops_read','standalone_copy_stops_insert'))
     or (schemaname='storage' and tablename='objects' and policyname not in
-      ('journey_media_read','journey_media_insert','profile_avatars_read','profile_avatars_insert'))) then
+      ('journey_media_read','journey_media_insert','profile_avatars_read','profile_avatars_insert',
+       'journey_media_thumbnail_v1_read'))
+    or (schemaname='public' and tablename in ('journeys','journey_stops') and policyname like 'standalone\_copy\_%'
+      and roles is distinct from array['customize_stops_rpc']::name[])) then
     raise exception 'Unexpected policies: independent policy review required before activation';
+  end if;
+  -- Neither copy path may copy the source author's media.
+  if to_regprocedure('private.copy_authorized_media(uuid,text)') is not null
+    or pg_get_functiondef('public.copy_journey(uuid)'::regprocedure)
+      ~ 'copy_(authorized_media|media_path)|journey_media_authorizations'
+    or (to_regprocedure('private.standalone_copy_journey_selected(uuid,uuid[],uuid)') is not null
+      and pg_get_functiondef('private.standalone_copy_journey_selected(uuid,uuid[],uuid)'::regprocedure)
+        ~ 'copy_(authorized_media|media_path)|journey_media_authorizations') then
+    raise exception 'Remix media copy detected: copy paths must store no inherited media';
   end if;
   if has_table_privilege('anon','public.journeys','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES')
     or has_table_privilege('authenticated','public.journeys','INSERT,UPDATE,TRUNCATE,TRIGGER,REFERENCES')

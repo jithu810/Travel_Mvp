@@ -1,5 +1,10 @@
 # Customize Stops backend preparation — 2026-10-20
 
+> SUPERSEDED (2026-10-26): this proposal copied inherited media and was never applied. It now
+> lives in `supabase/superseded/20261020164047_copy_journey_selected.sql`. Live uses the
+> standalone media-free RPC, recorded in `supabase/migrations/20261026045508_capture_customize_stops.sql`.
+> The hardening files are re-dated to 20261026051105 / 20261026051106.
+
 Local, unpublished work for [Mobile PR #3](https://github.com/jithu810/Travel_Mvp_Mobile/pull/3).
 No SQL was run against a hosted database. Neither Mobile checkout was modified.
 

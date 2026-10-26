@@ -1,3 +1,5 @@
+// SUPERSEDED: tests the media-copying 20261020164047 selected-copy proposal; live uses standalone
+// (see supabase/migrations/20261026045508_capture_customize_stops.sql). Not run by any script.
 // Opt-in synthetic-only PostgreSQL 17 test. Target is pinned to the approved
 // portable cluster. No environment files, hosted DSNs, database resets or
 // pre-existing/user-data deletion; deletion cases use newly created fixtures.

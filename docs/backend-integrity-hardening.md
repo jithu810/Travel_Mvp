@@ -91,18 +91,20 @@ It is RLS-protected and inaccessible to clients. Authorization has three sources
 2. Retained media: both a capability and an existing cover/stop reference in the
    locked destination journey. Retained stop media may become the cover and vice
    versa. Removing every reference retires a foreign capability.
-3. Copy: capability and current reference on the locked published source, followed
-   by optional object existence checking. It does not accept an arbitrary path
-   supplied by the copying caller. Missing Storage media is omitted from copies.
+3. Copy: none. Since `20261025153306_remix_without_media.sql` neither `copy_journey`
+   nor the Customize Stops `copy_journey_selected` copies the source author's cover or
+   stop photos: copies store NULL media and receive no media capability.
+   `private.copy_authorized_media` was removed; activation aborts if it exists or if
+   either copy function references a media-copy helper.
 
 Storage reads require either the existing uploader prefix or an authorized,
 currently referenced path on a published/caller-owned journey. The boolean helper
 runs as journey_rpc and does not bypass RLS. Publishing a forged reference alone
-cannot grant access. Copies keep capabilities and immutable object paths after
-the source is deleted or unpublished. Source deletion clears lineage and advances
+cannot grant access. Legacy copies made before remix-without-media keep their
+reviewed references and capabilities after the source is deleted or unpublished. Source deletion clears lineage and advances
 the recipient's version; it does not delete shared Storage objects.
 
-Reviewed `/images/` and durable HTTPS references can be retained/copied. New
+Reviewed `/images/` and durable HTTPS references can be retained. New
 arbitrary URLs are not accepted by save. Legacy/copy HTTPS forms reject query,
 fragment, user-info and Storage/object endpoint forms, including signed URLs.
 Existing uploads remain immutable. Failed or ambiguous final saves may leave
@@ -138,7 +140,8 @@ is the recovery policy. Do not claim universal deadlock freedom.
 These are forward-only migrations, intended to be rehearsed on an isolated
 restored snapshot before any separately authorized deployment:
 
-1. `20261005000000_legacy_media_review.sql` creates an admin-only inventory and
+1. `20261026051105_legacy_media_review.sql` (re-dated from 20261005000000 so both
+   files run after the recorded live migrations through 20261026045508) creates an admin-only inventory and
    attestation table. It does **not** close the old write vulnerability on its own.
 2. Run the read-only `supabase/audits/backend_integrity.sql`. Review foreign paths,
    known demo assets, missing objects, externally hosted media and row/aggregate
@@ -152,7 +155,7 @@ restored snapshot before any separately authorized deployment:
    an explicit reviewed one-based conversion before activation. Do not rerun the
    seed generator as a repair: it rejects zero-based legacy rows. The updated
    generator creates one-based rows and authorizes only its known local cover.
-5. `20261005010000_rpc_integrity_hardening.sql` acquires parent/stop table write
+5. `20261026051106_rpc_integrity_hardening.sql` (re-dated from 20261005010000) acquires parent/stop table write
    locks before rechecking inventory and seeding capabilities. Invalid/ambiguous
    data aborts activation without deleting or rewriting records. Row constraints
    are validated. Function ownership, grants, policies and Storage enforcement
@@ -237,9 +240,9 @@ Checks completed on 2026-10-19:
 
 Changed files:
 
-- `supabase/migrations/20261005000000_legacy_media_review.sql`: review inventory
+- `supabase/migrations/20261026051105_legacy_media_review.sql`: review inventory
   and explicit administrative provenance attestations.
-- `supabase/migrations/20261005010000_rpc_integrity_hardening.sql`: atomic RPC-only
+- `supabase/migrations/20261026051106_rpc_integrity_hardening.sql`: atomic RPC-only
   grants, RLS-bound execution role, media capabilities, validation and versions.
 - `supabase/audits/backend_integrity.sql`: read-only legacy/privilege inventory.
 - `scripts/lib/offline-db.mjs`: isolated auth/Storage fixture and ordered loader.

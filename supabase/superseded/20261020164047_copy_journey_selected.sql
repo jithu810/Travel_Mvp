@@ -1,3 +1,5 @@
+-- SUPERSEDED: copies media; live uses standalone (see 20261026045508_capture_customize_stops.sql).
+-- Do not apply. Kept for history only; moved out of supabase/migrations so no replay runs it.
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '5min';

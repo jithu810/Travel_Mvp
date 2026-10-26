@@ -1,3 +1,5 @@
+// SUPERSEDED: tests the media-copying 20261020164047 selected-copy proposal; live uses standalone
+// (see supabase/migrations/20261026045508_capture_customize_stops.sql). Not run by any script.
 // Executes the complete local migration history in disposable PostgreSQL/WASM.
 // No .env, sockets, hosted credentials or persistent database files are used.
 import assert from 'node:assert/strict';
