@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { DestinationSearch } from '@/components/destination/destination-search';
 import { DestinationCard } from '@/components/destination/destination-card';
 import { JourneyGrid } from '@/components/journey/journey-grid';
+import { JourneyHero } from '@/components/home/journey-hero';
 import { TravelImage } from '@/components/ui/travel-image';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ExploreMap } from '@/components/map/explore-map';
@@ -44,20 +45,12 @@ export default async function HomePage() {
   const quickDestinations = (publishedDestinations.length ? publishedDestinations : destinations).slice(0, 3);
   return <div className="space-y-10 sm:space-y-14">
     {siteUrl('/') && <JsonLd data={{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'Journey', url: siteUrl('/'), description: siteDescription }} />}
-    <section aria-labelledby="home-heading" className="relative">
-      <div className="relative h-[320px] overflow-hidden rounded-[1.75rem] bg-stone-200 sm:h-[400px] lg:h-[420px]">
-        <TravelImage src="/images/varkala.jpg" alt="Coastal travel inspiration for Varkala" sizes="(max-width: 1200px) 100vw, 1100px" priority />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 px-6 pb-14 text-white sm:px-10 sm:pb-16">
-          <p className="mb-3 text-xs font-semibold tracking-[0.18em] uppercase text-white/90">Places. People. A different perspective.</p>
-          <h1 id="home-heading" className="max-w-2xl text-4xl leading-[1.08] font-semibold tracking-tight sm:text-5xl lg:text-6xl">Where will your<br />next story take you?</h1>
-          <p className="mt-4 max-w-lg text-sm leading-6 text-white/90 sm:text-base">Discover beautiful journeys shared by travelers. Follow their stops, or remix a route into your own.</p>
-        </div>
-      </div>
+    <div>
+      <JourneyHero />
       <div className="relative mx-4 -mt-8 sm:mx-10"><DestinationSearch /></div>
       <div className="mt-5 flex flex-wrap items-center gap-x-5 px-4 text-sm sm:px-10"><span className="text-stone-500">Start somewhere:</span>{quickDestinations.map(destination => <Link key={destination.slug} href={`/destination/${destination.slug}`} className="inline-flex min-h-11 items-center gap-1 font-semibold text-brand">{destination.name}<span aria-hidden="true">↗</span></Link>)}</div>
       <nav aria-label="Discover Journey Creator" className="mt-2 flex flex-wrap gap-x-5 px-4 text-sm sm:px-10"><a href="#journeys-heading" className="inline-flex min-h-11 items-center font-medium text-brand">Discover journeys ↓</a><Link href="/explore" className="inline-flex min-h-11 items-center font-medium text-brand">Explore the world ↗</Link><a href="#styles-heading" className="inline-flex min-h-11 items-center font-medium text-brand">Choose your travel style ↓</a></nav>
-    </section>
+    </div>
     <div className="max-w-xl"><JourneySearch /></div>
     <WelcomeCard />
     <RecommendedJourneys {...recommendations}/>
@@ -80,6 +73,24 @@ export default async function HomePage() {
     <section aria-labelledby="styles-heading">
       <div className="mb-6"><p className="mb-2 text-xs font-semibold tracking-[0.15em] uppercase text-brand">Your people. Your pace.</p><h2 id="styles-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">Who’s coming along?</h2></div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{travelStyles.map(style => <Link key={style.type} href={`/explore?traveler=${style.type}`} className="rounded-2xl border border-stone-200 bg-white p-5 transition-colors hover:border-brand/40 hover:bg-[#f0f5ed]"><span aria-hidden="true" className="mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#e7eedf] text-xl text-brand">{style.symbol}</span><h3 className="font-semibold">{style.name} <span aria-hidden="true" className="float-right text-brand">↗</span></h3><p className="mt-2 text-sm leading-6 text-stone-600">{style.description}</p></Link>)}</div>
+    </section>
+
+    <section aria-labelledby="story-heading" className="grid overflow-hidden rounded-[1.75rem] bg-[#e8eadc] md:grid-cols-2">
+      <div className="relative min-h-64 md:min-h-[440px]">
+        <TravelImage src="/images/munnar.jpg" alt="" sizes="(max-width: 768px) 100vw, 550px" />
+        <p className="absolute right-5 bottom-5 rounded bg-[#e2c591] px-5 py-4 font-serif text-lg leading-tight text-[#203a30]">Collect moments,<br />not just miles. ✳</p>
+      </div>
+      <div className="px-7 py-10 sm:px-12 sm:py-14">
+        <p className="text-xs font-semibold tracking-[0.17em] uppercase text-[#59795c]">Your journey, your way</p>
+        <h2 id="story-heading" className="mt-4 font-serif text-4xl leading-tight text-[#1e3a2d] sm:text-5xl">Make every detour a story.</h2>
+        <p className="mt-5 text-sm leading-7 text-[#51675a]">Travel is more than the destination. Bring your routes, stops and memories together, so the little moments don’t get left behind.</p>
+        <ol className="mt-7 space-y-4 text-sm text-[#26483a]">
+          <li><span className="mr-3 font-serif text-xl text-[#9b7546]">01</span><strong>Discover something new.</strong> Explore journeys for your next adventure.</li>
+          <li><span className="mr-3 font-serif text-xl text-[#9b7546]">02</span><strong>Make it your own.</strong> Choose the stops that feel right for you.</li>
+          <li><span className="mr-3 font-serif text-xl text-[#9b7546]">03</span><strong>Remember the good parts.</strong> Bring photos and memories along.</li>
+        </ol>
+        <Link href="/explore" className="mt-6 inline-flex min-h-11 items-center font-semibold text-brand underline underline-offset-4">Find your inspiration ↗</Link>
+      </div>
     </section>
 
     <section aria-labelledby="map-heading" className="grid items-center gap-6 lg:grid-cols-[0.8fr_1.4fr] lg:gap-10">
