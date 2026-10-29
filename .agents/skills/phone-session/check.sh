@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Read-only status check for the phone dev session. Changes no files
 # (running adb may start the adb server in the background).
+# Explicit argument, then METRO_PORT, then legacy Codex default.
+port="${1:-${METRO_PORT:-8081}}"
+if ! [[ "$port" =~ ^[0-9]{1,5}$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
+  echo "Invalid Metro port: use an integer from 1 to 65535" >&2
+  exit 2
+fi
+port=$((10#$port))
+echo "METRO_PORT=$port"
 pkg="com.sree8100.journeycreatormobile"
 here="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
 web_root="$(cd -- "$here/../../.." >/dev/null && pwd)"
@@ -41,11 +49,14 @@ if [ -n "$adb" ]; then
   serials=$("$adb" devices 2>/dev/null | awk 'NR>1 && $2=="device" {print $1}')
 fi
 serial=$(printf '%s\n' "$serials" | grep -m1 -E '^[0-9.]+:[0-9]+$' || printf '%s\n' "$serials" | head -n1)
+if [ -n "${PHONE_SERIAL:-}" ]; then
+  serial=$(printf '%s\n' "$serials" | awk -v wanted="$PHONE_SERIAL" '$0==wanted {print; exit}')
+fi
 echo "DEVICE=${serial:-none}"
 echo "DEVICE_COUNT=$(printf '%s\n' "$serials" | grep -c .)"
 
 if [ -n "$serial" ]; then
-  if "$adb" -s "$serial" reverse --list 2>/dev/null | grep -q "tcp:8081 tcp:8081"; then
+  if "$adb" -s "$serial" reverse --list 2>/dev/null | awk -v endpoint="tcp:$port" '$2==endpoint && $3==endpoint {found=1} END {exit !found}' ; then
     echo "REVERSE=ok"
   else
     echo "REVERSE=missing"
@@ -60,10 +71,10 @@ else
   echo "APP_FOCUS=no"
 fi
 
-# Something answering on 8081; normally the Mobile repo's Metro.
-if curl -s -m 3 http://127.0.0.1:8081/status | grep -q running; then
+# Status alone does not prove Metro belongs to the expected checkout or computer.
+if curl -s -m 3 "http://127.0.0.1:$port/status" | grep -q running; then
   echo "METRO=ipv4"
-elif curl -s -g -m 3 "http://[::1]:8081/status" | grep -q running; then
+elif curl -s -g -m 3 "http://[::1]:$port/status" | grep -q running; then
   echo "METRO=ipv6-only"
 else
   echo "METRO=down"

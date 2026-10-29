@@ -6,3 +6,5 @@ description: Connect the product owner's Android phone and load the Journey Crea
 # Phone session
 
 The instructions are shared with Codex and kept in one place. Read `.agents/skills/phone-session/SKILL.md` (from the repository root) and follow it.
+
+Claude Code uses Metro/reverse port **8082** (Codex uses **8081**). Pass 8082 explicitly to the shared `check.sh` and follow the shared ownership/handoff rules before operating the phone. These are Metro ports, not Android wireless-debugging ports.
