@@ -14,11 +14,11 @@ Build the report only from evidence gathered in this session: real command outpu
 1. For each affected repo: `git rev-parse --short HEAD`, `git status --short --branch`, and the changed files (`git diff --stat` plus untracked files).
 2. The backend preflight decision and its reference.
 3. Checks actually run and their results (from `/web-checks`, `/mobile-checks` or agent reports).
-4. QA Tester result and Code Reviewer findings, with the snapshot they inspected, severity and disposition.
+4. QA Tester result and Code Reviewer findings when required by the tier, with snapshot, severity and disposition; otherwise state not required and why.
 5. Any branch, commit or PR URLs. Verify them with `gh pr view` or `git ls-remote` before listing them.
 
 ## Output
-Start with a short plain-language summary of what changed (2–4 lines), then:
+For small tasks, report only the change, checks/skips, review not required, blockers and publication state in a concise paragraph; do not gather the full checkpoint or query GitHub when nothing was published. For material tasks, use the format below. Start with a short plain-language summary of what changed (2–4 lines), then:
 
 ```text
 Timestamp (Asia/Kolkata):

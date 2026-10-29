@@ -1,6 +1,6 @@
 ---
 name: web-checks
-description: Run the Web repo (D:/Travel_Mvp) typecheck, lint and optional build/test checks and summarize results. Use after Web changes or when asked to check the web app.
+description: Select and run proportionate Web checks in D:/Travel_Mvp and summarize results. Use after Web changes or when asked to check the web app.
 argument-hint: "[optional: build | db | e2e | creation]"
 ---
 
@@ -12,9 +12,11 @@ Run in `D:/Travel_Mvp`. Report results only. Do not edit files or fix dependenci
 
 ## Steps
 1. Record `git rev-parse --short HEAD` and `git status --short --branch`.
-2. Always run, continuing even if one fails:
-   - `npm run typecheck`
-   - `npm run lint`
+2. Select checks using the shared workflow's proportional verification tier; an explicit request for broader checks takes precedence:
+   - Small cosmetic change: inspect diff and visual appearance where useful; no tests/typecheck/lint/build by default.
+   - Focused behavior change: run affected tests, typecheck for TypeScript contract changes and scoped lint where useful.
+   - Major/sensitive change: relevant regression/integration suites, typecheck and lint; full applicable suite for broad impact or uncertain coverage, build when affected.
+   - Reuse passing checks for an unchanged snapshot; rerun affected checks after fixes and broaden only for failures or discovered risk.
 3. Run only if requested or clearly relevant to the change:
    - `build` → `npm run build` (a local build only; it never deploys)
    - `db` → `npm run test:db` (synthetic local fixtures)
@@ -27,8 +29,8 @@ Run in `D:/Travel_Mvp`. Report results only. Do not edit files or fix dependenci
 ## Output
 ```text
 Repo / revision / dirty files:
-typecheck:  pass | fail — first error: <file:line message>
-lint:       pass | fail — first error: <file:line rule>
+typecheck:  not run | pass | fail — first error: <file:line message>
+lint:       not run | pass | fail — first error: <file:line rule>
 build:      not run | pass | fail — <summary>
 test:db / test:creation / test:e2e: not run | pass | fail — <summary>
 Skipped and why:

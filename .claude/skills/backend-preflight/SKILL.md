@@ -1,6 +1,6 @@
 ---
 name: backend-preflight
-description: Run the required read-only Supabase backend preflight before any Web or Mobile feature and produce the checkpoint record from docs/multi-agent-workflow.md. Use at the start of every feature, before implementation is assigned.
+description: Run the conditional read-only Supabase preflight for backend-impacting or uncertain Web/Mobile work. Skip live checks for repository-assessed UI-only work under the shared workflow.
 argument-hint: "<feature scope>"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "<feature scope>"
 
 Feature scope: $ARGUMENTS
 
-The Architect (main session) runs this skill. The preflight is read-only. It never authorizes live changes, and feature coding stays paused until it is complete.
+First apply the backend-impact assessment in docs/multi-agent-workflow.md. For UI-only work with unchanged data/auth/persistence/API/Storage contracts, record inspected paths and rationale briefly and stop here without live checks or specialist assignment. Documentation-only workflow maintenance also needs no live preflight. For backend-impacting or uncertain work, the Architect (main session) runs the following full-preflight skill. The preflight is read-only. It never authorizes live changes, and feature coding stays paused until it is complete.
 
 ## Who does what
 - **Architect** confirms the Supabase target with the product owner and runs the live-state checks with the Supabase connector. Specialist agents do not have the Supabase tools.
