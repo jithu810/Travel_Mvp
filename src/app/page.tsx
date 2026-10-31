@@ -49,7 +49,7 @@ export default async function HomePage() {
         <TravelImage src="/images/varkala.jpg" alt="Coastal travel inspiration for Varkala" sizes="(max-width: 1200px) 100vw, 1100px" priority />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 px-6 pb-14 text-white sm:px-10 sm:pb-16">
-          <p className="mb-3 text-xs font-semibold tracking-[0.18em] uppercase text-white/90">Places. People. A different perspective.</p>
+          <p className="mb-3 text-xs font-semibold tracking-[0.18em] uppercase text-white/90">Journey Buddy · Places. People. A different perspective.</p>
           <h1 id="home-heading" className="max-w-2xl text-4xl leading-[1.08] font-semibold tracking-tight sm:text-5xl lg:text-6xl">Where will your<br />next story take you?</h1>
           <p className="mt-4 max-w-lg text-sm leading-6 text-white/90 sm:text-base">Discover beautiful journeys shared by travelers. Follow their stops, or remix a route into your own.</p>
         </div>
