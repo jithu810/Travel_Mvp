@@ -5,7 +5,7 @@ description: Connect the product owner's Android phone and load the Journey Crea
 
 # Phone session
 
-Shared by Claude Code and Codex. This file is the only copy of the instructions; `.claude/skills/phone-session/SKILL.md` points here. It lives in the Web repo; Mobile AGENTS.md and CLAUDE.md reference its absolute path for sessions rooted in Mobile.
+This is the shared phone procedure for both tools. It lives in the Web repo; sessions rooted in Mobile use its absolute path.
 
 Run this once per conversation, and only when a Mobile task is authorized. Run it again if a later adb/Metro command fails or the phone changes session/laptop ownership. It changes no tracked files; Metro creates its gitignored `.expo/` folder in the Mobile repo.
 
@@ -22,7 +22,7 @@ Use these defaults on either one laptop or two laptops sharing the same Android 
 | Codex | 8081 | 8081 | `http://localhost:8081` |
 | Claude Code | 8082 | 8082 | `http://localhost:8082` |
 
-Set a task-specific shell variable `metroPort` (PowerShell) or `metro_port` (Bash) to your assigned port and use it consistently in the status script, Metro start, reverse mapping and launch URL. Pass the numeric port to `check.sh <metro-port>`; its argument overrides `METRO_PORT`, with 8081 retained as a legacy fallback. Replace every `<metro-port>` placeholder below with the assigned integer; never paste angle-bracket placeholders into a shell. Claude must explicitly pass 8082. Optional `PHONE_SERIAL` selects an already-connected device; an unavailable selection reports DEVICE=none rather than falling back to another phone.
+Set a task-specific shell variable `metroPort` (PowerShell) or `metro_port` (Bash) to your assigned port and use it consistently in the status script, Metro start, reverse mapping and launch URL. Pass the numeric port to `check.sh <metro-port>`; its argument overrides `METRO_PORT`, with 8081 retained as a legacy fallback. Replace every `<metro-port>` placeholder below with the assigned integer; never paste angle-bracket placeholders into a shell. Tool-specific startup notes require passing the assigned port explicitly. Optional `PHONE_SERIAL` selects an already-connected device; an unavailable selection reports DEVICE=none rather than falling back to another phone.
 
 ADB wireless connection/pairing ports are assigned by Android and can change. They are separate from these Metro ports; use the phone's displayed values and pair each laptop separately. Never assign 8081/8082 as wireless-debugging ports.
 
@@ -76,7 +76,7 @@ Take a screenshot by saving it on the phone and pulling it into a temporary or s
     adb -s <serial> pull /sdcard/phone-session-<metro-port>.png <scratch-dir>/screen.png
     adb -s <serial> shell rm /sdcard/phone-session-<metro-port>.png
 
-Look at the image. Report in one or two lines: session owner (Codex/Claude), laptop, device, port, expected checkout, whether Metro is running, and what screen is showing. APP_FOCUS=yes alone does not confirm the correct bundle/port. Then continue with the task, using the same screenshot steps to check changes on the device.
+Look at the image. Report in one or two lines: session owner, laptop, device, port, expected checkout, whether Metro is running, and what screen is showing. APP_FOCUS=yes alone does not confirm the correct bundle/port. Then continue with the task, using the same screenshot steps to check changes on the device.
 
 ## Notes
 
