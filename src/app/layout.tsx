@@ -26,6 +26,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <nav aria-label="Support and legal" className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
             <Link href="/privacy" className="inline-flex min-h-11 items-center underline underline-offset-4">Privacy Policy</Link>
             <Link href="/terms" className="inline-flex min-h-11 items-center underline underline-offset-4">Terms of Service</Link>
+            <Link href="/delete-account" className="inline-flex min-h-11 items-center underline underline-offset-4">Request account deletion</Link>
             <a href="mailto:sreejith1043@gmail.com" className="inline-flex min-h-11 items-center underline underline-offset-4">Contact support</a>
           </nav>
           <details className="mt-3 text-xs leading-6"><summary className="cursor-pointer">Photo credits</summary><p>Representative cover photography from Unsplash. Munnar photo: <a href="https://unsplash.com/photos/zoxqwWXy-EE" className="underline">Unsplash</a>. Kochi: <a href="https://commons.wikimedia.org/wiki/File:Chinese_Fishing_Nets_Cochin.jpg" className="underline">Chinese Fishing Nets Cochin — Brian Snelson</a>, <a href="https://creativecommons.org/licenses/by/2.0/" className="underline">CC BY 2.0</a>; cropped for display. Demo imagery is not user-uploaded photography.</p></details>

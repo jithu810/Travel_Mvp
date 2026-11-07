@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { LegalPage } from '@/components/legal/legal-page';
 import { publicMetadata } from '@/lib/seo/metadata';
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 const heading = 'text-xl font-semibold text-stone-900';
 
 export default function PrivacyPage() {
-  return <LegalPage title="Privacy Policy">
+  return <LegalPage title="Privacy Policy" updated={{ dateTime: '2026-11-07', label: '7 November 2026' }}>
     <p>Journey Buddy is the travel service also shown as Journey Creator on our website and mobile app. This policy explains how information is handled when you discover, create, save or share journeys and use account and travel features.</p>
 
     <section aria-labelledby="privacy-account" className="space-y-3">
@@ -46,6 +47,7 @@ export default function PrivacyPage() {
       <h2 id="privacy-controls" className={heading}>Your choices, retention and deletion</h2>
       <p>You can edit available profile fields and use the app&apos;s controls to change or delete your own journeys and drafts. You can also revoke Journey&apos;s Google access through your Google Account settings. Revoking Google access does not itself delete your Journey account or saved content.</p>
       <p>For account deletion, access or correction requests that the app does not provide directly, contact the support address below. We may need to verify that you control the account before acting. Removing a journey is not the same as deleting every uploaded file or independent remix; copies already made by other people may remain.</p>
+      <p>You can request deletion without reinstalling the app or signing in to this website. See <Link href="/delete-account" className="font-medium text-brand underline underline-offset-4">Request account deletion</Link> for the support address, what to include and the data covered. Opening an email draft does not send a request or delete an account.</p>
       <p>Information may be retained while needed to operate your account and requested features, handle support or security issues, or meet applicable obligations. Local recovery data can expire when the app next reads it. Deletion can be subject to backup and security retention; we do not promise an immediate purge of all copies.</p>
     </section>
 

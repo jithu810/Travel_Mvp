@@ -1,15 +1,16 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
-export function LegalPage({ title, children }: { title: string; children: ReactNode }) {
+export function LegalPage({ title, children, updated = { dateTime: '2026-10-31', label: '31 October 2026' } }: { title: string; children: ReactNode; updated?: { dateTime: string; label: string } }) {
   return <article className="mx-auto max-w-3xl space-y-8 pb-6 text-sm leading-7 text-stone-700 sm:text-base">
     <header className="space-y-3 border-b border-stone-200 pb-6">
       <p className="text-xs font-semibold tracking-widest uppercase text-brand">Journey Buddy / Journey Creator</p>
       <h1 className="text-3xl font-semibold tracking-tight text-stone-900 sm:text-4xl">{title}</h1>
-      <p className="text-sm text-stone-500">Last updated <time dateTime="2026-10-31">31 October 2026</time></p>
+      <p className="text-sm text-stone-500">Last updated <time dateTime={updated.dateTime}>{updated.label}</time></p>
       <nav aria-label="Legal information" className="flex flex-wrap gap-x-5 gap-y-1">
         <Link href="/privacy" className="inline-flex min-h-11 items-center font-medium text-brand underline underline-offset-4">Privacy Policy</Link>
         <Link href="/terms" className="inline-flex min-h-11 items-center font-medium text-brand underline underline-offset-4">Terms of Service</Link>
+        <Link href="/delete-account" className="inline-flex min-h-11 items-center font-medium text-brand underline underline-offset-4">Request account deletion</Link>
       </nav>
     </header>
     {children}
