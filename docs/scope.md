@@ -6,11 +6,11 @@
 - Inspect the repository and prepare the foundation before writing application code.
 - Receive product specifications in stages.
 - Do not implement future features.
-- Start the project in the empty local workspace `D:\Travel_Mvp`.
+- Start the project in the empty local workspace `travel-mvp-web`.
 
 ## Foundation inspection
 
-The inspected workspace is `D:\Travel_Mvp`. It contained no files and was not a Git repository. No `AGENTS.md` was found in the workspace or its parent directory.
+The inspected workspace is `travel-mvp-web`. It contained no files and was not a Git repository. No `AGENTS.md` was found in the workspace or its parent directory.
 
 Available local tools:
 

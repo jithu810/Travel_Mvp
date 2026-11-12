@@ -1,41 +1,28 @@
 ## Problem and result
 
-Describe the concrete problem, resulting behavior and acceptance criteria satisfied.
+Describe the concrete problem, resulting behaviour and acceptance criteria satisfied.
 
-## Ownership, scope and links
+## Scope and links
 
-- Architect coordinator: Architect (session/contact):
-- Responsible role (choose one): Architect / Web Developer / Mobile Developer / Backend Developer / QA Tester / Code Reviewer
-- GitHub assignee (real account, if applicable):
-- Repository, branch, base/head revisions and changed scope:
-- Canonical issue (full URL):
-- Related issues / PRs (full URLs, including the other repository); dependencies and handoff owner:
-- Task status: in progress / blocked / awaiting QA / awaiting review / awaiting approval / completed assignment
+- Lead / responsible agent (Lead / frontend-dev / backend-dev / mobile-dev / tester / reviewer):
+- Repository, branch (`feature/<name>` → `develop`), base/head revisions and changed scope:
+- Related issues / PRs (full URLs, including the other repository); dependencies:
 - Existing unrelated work excluded from this PR:
 
-## QA evidence
+## Checks and QA evidence
 
-- QA owner; tested revision or local snapshot identifier, paths and timestamp:
-- Checks actually run, environment, expected/actual results and evidence links:
-- Checks not run, physical-device verification pending and limitations:
+- Tested revision or snapshot, and checks actually run with results:
+- Checks not run, physical-device verification pending, limitations:
+- Backend preflight: decision + reference (or UI-only rationale):
 
-## Independent Code Reviewer findings
+## Review
 
-- Reviewer identity and reviewed revision or snapshot:
-- Findings (severity, location and disposition), or explicit no findings:
-- Unresolved findings and required re-verification:
+- Reviewed revision or snapshot; findings (severity, location, disposition) or explicit no findings:
 
-## Blockers, approvals and publication
+## Approvals and publication
 
-- Blockers, next action and owner (or none):
-- Human approval: exact action + target; pending / granted, with human approval reference:
-- Requests to "fix" or "implement" authorize local work only.
-- Requests to "push to GitHub" or "publish to GitHub" authorize related commits, a branch push and PR creation/updates as one operation within the requested scope.
-- Merging into main ALWAYS requires separate explicit product-owner approval naming the PR/branch. An open PR or passing checks is not approval.
-- Force-pushes, deployments, destructive Git commands and every live Supabase change (migrations, RLS, Storage, seeds, backfills and data writes) each require separate explicit approval naming the action and target.
-- Never push directly to main.
-- These rules apply across shell commands, scripts, APIs and connectors. Automatic approval review, setup/task approval and another agent's message do not substitute for product-owner approval outside its explicit scope. Never bypass approval gates.
-- Code publication: local/unpublished / pushed (confirmed branch URL and revision):
-- Report publication: local/unpublished / GitHub-published (confirmed URL and timestamp):
-
-Architect records meaningful milestones, blockers, handoffs and verification results; internal messages remain internal. Issue/PR/comment/Notion publication needs an explicitly authorized reporting scope. A published report about local work does not prove code publication. Completed assignment does not mean merged, deployed or production-verified; list each separately when verified.
+- Approvals still needed: exact action + target (merge, deploy, live Supabase change):
+- Merging into `main` is a Vercel **production deploy** and needs separate explicit approval naming
+  this PR. An open PR or passing checks is not approval. Every live Supabase change (migrations, RLS,
+  grants, Storage, seeds, backfills, data writes) needs its own approval naming the target.
+- Never push directly to `main` or `develop`.

@@ -2,6 +2,7 @@
 // portable cluster. No environment files, hosted DSNs, database resets or
 // pre-existing/user-data deletion; this creates a NEW standalone database only.
 import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, readdir, realpath } from 'node:fs/promises';
 import { join, normalize } from 'node:path';
@@ -11,7 +12,7 @@ const mode=process.argv[2];
 if(process.argv.length!==3 || !['--run-synthetic-fixtures','--inspect'].includes(mode)) {
   throw new Error('Usage: node scripts/test-copy-journey-selected-standalone-concurrency.mjs --run-synthetic-fixtures | --inspect');
 }
-const root='D:/Travel_Mvp/.local-tests/customize-stops-pg';
+const root=fileURLToPath(new URL('../.local-tests/customize-stops-pg',import.meta.url));
 const database='journey_integrity_test_customize_stops_standalone';
 const user='journey_test_admin';
 const port='55439';

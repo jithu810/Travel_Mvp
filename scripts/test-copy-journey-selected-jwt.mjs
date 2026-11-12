@@ -1,5 +1,6 @@
 // LOCAL ONLY. Fixed loopback target; no DSNs, env files, hosted access or old DB writes.
 import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {readFile,readdir,writeFile,realpath} from 'node:fs/promises';
 import {join,normalize} from 'node:path';
@@ -41,8 +42,8 @@ if(mode==='--offline') {
   await import('data:text/javascript;base64,'+Buffer.from(suite).toString('base64'));
   console.log('PASS JWT-corrected full RLS/RPC 70-contract suite; installer guards tested separately on real PostgreSQL.');
 } else {
-  const root='D:/Travel_Mvp/.local-tests/customize-stops-pg/jwt-correction';
-  const psql='D:/Travel_Mvp/.local-tests/customize-stops-pg/pgsql/bin/psql.exe';
+  const root=fileURLToPath(new URL('../.local-tests/customize-stops-pg/jwt-correction',import.meta.url));
+  const psql=fileURLToPath(new URL('../.local-tests/customize-stops-pg/pgsql/bin/psql.exe',import.meta.url));
   const database='journey_jwt_correction_test',admin='supabase_admin',installer='postgres';
   const identity=JSON.parse(await readFile(join(root,'cluster-identity.json'),'utf8'));
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^PG/i.test(key)));
