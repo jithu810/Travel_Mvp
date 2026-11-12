@@ -1,6 +1,7 @@
 // LOCAL ONLY: exact reviewed SQL, fixed synthetic PostgreSQL17 loopback cluster.
 // No hosted DSNs, credentials, environment files, old database writes or role-attribute changes.
 import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {readFile,readdir,writeFile,realpath} from 'node:fs/promises';
 import {join,normalize} from 'node:path';
@@ -40,8 +41,8 @@ if(mode==='--offline') {
   await import('data:text/javascript;base64,'+Buffer.from(suite).toString('base64'));
   console.log('PASS rerunnable convergence-result full70 RLS/RPC contract regression; guarded installer covered on real PG.');
 } else {
-  const root='D:/Travel_Mvp/.local-tests/customize-stops-pg/jwt-correction';
-  const psql='D:/Travel_Mvp/.local-tests/customize-stops-pg/pgsql/bin/psql.exe';
+  const root=fileURLToPath(new URL('../.local-tests/customize-stops-pg/jwt-correction',import.meta.url));
+  const psql=fileURLToPath(new URL('../.local-tests/customize-stops-pg/pgsql/bin/psql.exe',import.meta.url));
   const databases=['journey_jwt_rerun_clean','journey_jwt_rerun_mixed','journey_jwt_rerun_observed'];
   const admin='supabase_admin',installer='postgres';
   const identity=JSON.parse(await readFile(join(root,'cluster-identity.json'),'utf8'));

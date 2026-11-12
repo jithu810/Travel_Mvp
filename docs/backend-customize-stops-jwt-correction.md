@@ -21,7 +21,7 @@ The opt-in real harness is machine-pinned; `--run-local` requires a fresh dedica
 The new server remains running, loopback only, without a Windows service. Stop only this server with:
 
 ```powershell
-& 'D:/Travel_Mvp/.local-tests/customize-stops-pg/pgsql/bin/pg_ctl.exe' -D 'D:/Travel_Mvp/.local-tests/customize-stops-pg/jwt-correction/data' -m fast -w stop
+& '.local-tests/customize-stops-pg/pgsql/bin/pg_ctl.exe' -D '.local-tests/customize-stops-pg/jwt-correction/data' -m fast -w stop
 ```
 
 Independent SQL/test review found no outstanding actionable issues. Its nullable-policy-aggregate finding was fixed with `IS DISTINCT FROM` and a missing-all-policies rejection test; final documentation wording is awaiting reviewer confirmation. Before any hosted application, review this exact candidate and obtain explicit approval for the target/file; repeat read-only catalog preflight if state changed. PostgREST must set request claims from a verified JWT: local SQL fixtures test identity interpretation and RLS, not JWT signature verification or real Auth/PostgREST integration. Real API/editor/device acceptance remains unverified. On a failed transaction, rollback retains the original installed state. If a subsequently approved rollout needs disabling, obtain separate approval to revoke client EXECUTE on **both** `public.copy_journey_selected(uuid,uuid[],uuid)` and `private.standalone_copy_journey_selected(uuid,uuid[],uuid)`; the existing private authenticated grant otherwise remains an entry point. Preserve the helper, receipts and copied drafts; do not drop data or broaden auth/Storage permissions.

@@ -1,2 +1,0 @@
-# Shared agent skills run under bash on every OS; keep LF so Windows checkouts don't break them.
-.agents/** text eol=lf

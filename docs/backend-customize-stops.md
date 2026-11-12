@@ -55,7 +55,7 @@ unchanged.
 
 ## Local checks
 
-Run `node scripts/test-copy-journey-selected.mjs` from `D:\Travel_Mvp`.
+Run `node scripts/test-copy-journey-selected.mjs` from `travel-mvp-web`.
 This uses the already-installed PGlite and existing offline harness, loads the
 complete migration history into memory and reads no environment files or hosted
 credentials. The initial run passed 84 assertions covering function ownership,
@@ -165,7 +165,7 @@ reviewable actions, not consequences of this readiness assessment.
 ## Approved portable PostgreSQL verification — 2026-10-20
 
 The product owner explicitly authorized checking the new directory
-`D:\Travel_Mvp\.local-tests\customize-stops-pg` and port 55439, then installing
+`.local-tests\customize-stops-pg` and port 55439, then installing
 and starting a disposable PostgreSQL 17 cluster there with synthetic fixtures.
 Immediate checks before creation confirmed the directory did not exist and the
 port had no connections. The new root contains its own `*` `.gitignore`; runtime
@@ -182,7 +182,7 @@ matching the checksum [published by an EDB contributor in its installer reposito
 Only the archive's `pgsql/bin`, `lib` and `share` runtime files were extracted,
 with destination paths checked to remain in the approved root.
 
-`initdb -D D:/Travel_Mvp/.local-tests/customize-stops-pg/data -U journey_test_admin
+`initdb -D .local-tests/customize-stops-pg/data -U journey_test_admin
 --auth-host=trust --auth-local=trust --encoding=UTF8 --locale=C` initialized only
 the new cluster. Configuration restricts the listener to `127.0.0.1:55439` and
 allows only `journey_test_admin` from that IPv4 loopback address; other users and
@@ -258,7 +258,7 @@ To inspect: `node scripts/test-copy-journey-selected-concurrency.mjs --inspect`.
 To stop only this approved cluster, use:
 
 ```powershell
-& 'D:/Travel_Mvp/.local-tests/customize-stops-pg/pgsql/bin/pg_ctl.exe' stop -D 'D:/Travel_Mvp/.local-tests/customize-stops-pg/data' -m fast -w
+& '.local-tests/customize-stops-pg/pgsql/bin/pg_ctl.exe' stop -D '.local-tests/customize-stops-pg/data' -m fast -w
 ```
 
 These tests use synthetic `auth.uid()` and Storage-table fixtures with real

@@ -34,8 +34,8 @@ if(mode==='--offline') {
   await import('data:text/javascript;base64,'+Buffer.from(suite).toString('base64'));
   console.log('PASS replacement exact-body/ACL-order equivalence and existing 70-assertion suite against the replacement SQL.');
 } else {
-  const root='D:/Travel_Mvp/.local-tests/customize-stops-pg/permissions-fix';
-  const psql='D:/Travel_Mvp/.local-tests/customize-stops-pg/pgsql/bin/psql.exe';
+  const root=fileURLToPath(new URL('../.local-tests/customize-stops-pg/permissions-fix',import.meta.url));
+  const psql=fileURLToPath(new URL('../.local-tests/customize-stops-pg/pgsql/bin/psql.exe',import.meta.url));
   const database='journey_permissions_test';
   const installer='permissions_migrator';
   const clusterAdmin='permissions_cluster_admin';

@@ -1,6 +1,7 @@
 // Local-only auth namespace regression. No hosted DSNs, environment files,
 // global role changes, full migration reruns or edits to retained databases.
 import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
 import { spawn } from 'node:child_process';
 import { readFile,writeFile,realpath } from 'node:fs/promises';
 import { join,normalize } from 'node:path';
@@ -29,8 +30,8 @@ if(mode==='--offline') {
     console.log('PASS actual full RPC reproduces42501schemaauth with uidEXECUTE alreadytrue; exact USAGE-only patch restores namespace access without partial rows.');`);
   await import('data:text/javascript;base64,'+Buffer.from(suite).toString('base64'));
 } else {
-  const root='D:/Travel_Mvp/.local-tests/customize-stops-pg/permissions-fix';
-  const psql='D:/Travel_Mvp/.local-tests/customize-stops-pg/pgsql/bin/psql.exe';
+  const root=fileURLToPath(new URL('../.local-tests/customize-stops-pg/permissions-fix',import.meta.url));
+  const psql=fileURLToPath(new URL('../.local-tests/customize-stops-pg/pgsql/bin/psql.exe',import.meta.url));
   const database='journey_auth_usage_test';
   const admin='permissions_cluster_admin',installer='permissions_migrator';
   const identity=JSON.parse(await readFile(join(root,'cluster-identity.json'),'utf8'));

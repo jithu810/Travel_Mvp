@@ -45,7 +45,7 @@ and header, preventing an unnoticed function-body or ACL expansion.
 
 Real PostgreSQL 17.11 testing used a new isolated synthetic cluster at
 `127.0.0.1:55440`, with data under
-`D:/Travel_Mvp/.local-tests/customize-stops-pg/permissions-fix/data`.
+`.local-tests/customize-stops-pg/permissions-fix/data`.
 Directory absence and unused port were checked before initialization. Existing
 binaries were reused; no service, global configuration, retained database or
 existing cluster role was changed.
