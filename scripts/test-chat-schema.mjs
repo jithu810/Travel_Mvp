@@ -1,5 +1,5 @@
 // LOCAL ONLY: in-memory PGlite with synthetic fixtures. No hosted DSNs, credentials or environment files.
-// Covers 20261127150000_chat_v1: catalog/ACL, auth, request flow, cooldown, block, report, pagination,
+// Covers 20261128032947_chat_v1: catalog/ACL, auth, request flow, cooldown, block, report, pagination,
 // read state, deletion, replay, rate limits and realtime.messages policies.
 import assert from 'node:assert/strict';
 import { readdir } from 'node:fs/promises';

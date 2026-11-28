@@ -1,5 +1,5 @@
 // LOCAL ONLY: in-memory PGlite, synthetic fixtures. No hosted DSNs, credentials or environment files.
-// Independent adversarial cases for 20261127150000_chat_v1 (owner decisions 2026-11-27, option A: blocked and
+// Independent adversarial cases for 20261128032947_chat_v1 (owner decisions 2026-11-27, option A: blocked and
 // cooldown sends store nothing and answer pending-shaped).
 // Hard checks must hold, otherwise the run throws. FINDINGS (finding(...)) are desired properties that do NOT hold:
 // they are collected, printed with an id and make the process exit with code 1 after the run. NOTES are informational.
